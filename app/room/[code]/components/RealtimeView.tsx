@@ -7,7 +7,7 @@
 // - Input pemain dikirim ke host lewat sendInput/sendRotate.
 // - ResultView muncul saat host menyatakan pertandingan selesai.
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRealtimeRoom } from '@/hooks/useRealtimeRoom'
 import { MIN_PLAYERS_TO_START, PLAYERS_PER_ROOM } from '@/lib/constants'
 import TreePanel from './TreePanel'
@@ -86,6 +86,46 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
       transitionElapsed: s?.transitionElapsed ?? 0,
     }
   }, [getMyState])
+
+  // ---- Input keyboard khusus Windows ----
+  // A = geser kiri, D = geser kanan, J = pukul kiri, L = pukul kanan.
+  // Hanya aktif saat layar bermain agar tidak mengganggu lobby/result.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return // abaikan auto-repeat saat tombol ditahan
+      if (phase !== 'playing') return
+      // Jangan tangkap saat pengguna sedang mengetik di input.
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) {
+        return
+      }
+      switch (e.key) {
+        case 'a':
+        case 'A':
+          e.preventDefault()
+          sendRotate('left')
+          break
+        case 'd':
+        case 'D':
+          e.preventDefault()
+          sendRotate('right')
+          break
+        case 'j':
+        case 'J':
+          e.preventDefault()
+          sendInput('left')
+          break
+        case 'l':
+        case 'L':
+          e.preventDefault()
+          sendInput('right')
+          break
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [phase, sendInput, sendRotate])
 
   // ---- Layar koneksi ----
   if (connState === 'connecting') {
@@ -308,6 +348,20 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
 
         <div className="relative">
           <TreePanel getState={treeState} onStrike={handleStrike} onRotate={handleRotate} />
+        </div>
+
+        {/* Petunjuk kontrol keyboard (khusus Windows) */}
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs font-bold text-ink/60">
+          <span>
+            <kbd className="rounded border-2 border-ink/40 bg-white px-1.5 py-0.5 text-ink">A</kbd>{' '}
+            <kbd className="rounded border-2 border-ink/40 bg-white px-1.5 py-0.5 text-ink">D</kbd>{' '}
+            Geser
+          </span>
+          <span>
+            <kbd className="rounded border-2 border-ink/40 bg-white px-1.5 py-0.5 text-ink">J</kbd>{' '}
+            <kbd className="rounded border-2 border-ink/40 bg-white px-1.5 py-0.5 text-ink">L</kbd>{' '}
+            Pukul
+          </span>
         </div>
 
         <div className="h-8">
