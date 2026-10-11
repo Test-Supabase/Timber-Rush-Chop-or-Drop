@@ -56,6 +56,13 @@ export const HIT_POPUP_RIGHT_PCT = 72; // % lebar: posisi popup untuk pukulan si
 export const HIT_POPUP_TOP_MIN_PCT = 30; // % tinggi: batas atas area popup
 export const HIT_POPUP_TOP_RANGE_PCT = 40; // % tinggi: rentang vertikal area popup
 
+// --- Bar cooldown kapak (bawah area batang) ---
+export const COOLDOWN_BAR_WIDTH_PX = 208; // px: lebar bar cooldown
+export const COOLDOWN_BAR_HEIGHT_PX = 16; // px: tinggi bar cooldown
+export const COOLDOWN_BAR_BOTTOM_PX = 40; // px: jarak bar dari bawah (di atas teks "Sisi")
+export const COOLDOWN_ICON_SIZE_PX = 18; // px: ukuran ikon kapak di pojok kiri bar
+export const CONTROL_BUTTON_BOTTOM_PX = 72; // px: jarak tombol putar dari bawah
+
 // --- Jaringan / Realtime (Supabase) ---
 export const NET_TICK_HZ = 30; // laju simulasi host (langkah/detik)
 export const NET_BROADCAST_MS = 100; // interval siar snapshot host (ms)

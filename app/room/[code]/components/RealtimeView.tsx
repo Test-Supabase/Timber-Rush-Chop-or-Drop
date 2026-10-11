@@ -100,6 +100,7 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
       lastHit: s?.lastHit ?? 'none',
       lastGain: s?.lastGain ?? 0,
       lastSide: s?.lastSide ?? 'left',
+      swingCooldown: s?.swingCooldown ?? 0,
     }
   }, [getMyState, getPlayerState, isSpectating, watchingId])
 

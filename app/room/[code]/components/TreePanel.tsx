@@ -7,6 +7,12 @@ import { useEffect, useRef } from 'react'
 import {
   SIDES,
   TREE_TRANSITION,
+  SWING_COOLDOWN,
+  COOLDOWN_BAR_WIDTH_PX,
+  COOLDOWN_BAR_HEIGHT_PX,
+  COOLDOWN_BAR_BOTTOM_PX,
+  COOLDOWN_ICON_SIZE_PX,
+  CONTROL_BUTTON_BOTTOM_PX,
 } from '@/lib/constants'
 
 interface TreePanelProps {
@@ -21,6 +27,7 @@ interface TreePanelProps {
     lastHit?: 'correct' | 'wrong' | 'none'
     lastGain?: number
     lastSide?: 'left' | 'right'
+    swingCooldown: number
   }
   onStrike: (side: 'left' | 'right') => void
   onRotate: (dir: 'left' | 'right') => void
@@ -76,6 +83,9 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>(0)
   const prevRotationRef = useRef<number | null>(null)
+  // Bar cooldown kapak (diisi ulang setelah ayunan, tanpa re-render React).
+  const cooldownFillRef = useRef<HTMLDivElement>(null)
+  const cooldownWrapRef = useRef<HTMLDivElement>(null)
   // Simpan tekstur random per sisi (konsisten saat kembali ke sisi yang sama).
   const barkPatternsRef = useRef<Map<number, { knots: Array<{ x: number; y: number; r: number }> }>>(new Map())
 
@@ -134,6 +144,17 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
 
       syncSize()
       if (cssW > 0 && cssH > 0) drawTreeTrunk(ctx, cssW, cssH, s)
+
+      // Bar cooldown: ditampilkan saat masih cooldown, terisi bertahap.
+      const cd = s.swingCooldown ?? 0
+      if (cooldownWrapRef.current) {
+        cooldownWrapRef.current.style.visibility = cd > 0 ? 'visible' : 'hidden'
+      }
+      if (cooldownFillRef.current) {
+        const ratio = SWING_COOLDOWN > 0 ? Math.min(1, cd / SWING_COOLDOWN) : 0
+        // Terisi dari kosong (0%) ke penuh (100%) saat cooldown berjalan.
+        cooldownFillRef.current.style.width = `${(1 - ratio) * 100}%`
+      }
 
       rafRef.current = requestAnimationFrame(render)
     }
@@ -307,11 +328,7 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
 
     ctx.globalAlpha = 1
 
-    // Indikator sisi di bawah layar.
-    ctx.fillStyle = '#2b1d0e'
-    ctx.font = 'bold 14px "Trebuchet MS", sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText(`Sisi ${s.rotation + 1} / ${SIDES}`, w / 2, h - 10)
+    // Teks sisi kini dirender sebagai elemen HTML (di JSX) agar tidak dobel.
   }
 
   const handleCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -331,7 +348,10 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
         aria-label="Batang pohon. Klik kiri atau kanan untuk memukul."
       />
       {/* Tombol putar di bawah layar */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 flex items-center justify-between px-6">
+      <div
+        className="pointer-events-none absolute inset-x-0 flex items-center justify-between px-6"
+        style={{ bottom: `${CONTROL_BUTTON_BOTTOM_PX}px` }}
+      >
         <button
           type="button"
           onPointerDown={(e) => {
@@ -354,6 +374,46 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
         >
           ▶
         </button>
+      </div>
+
+      {/* Bar cooldown ayunan kapak — terpusat, tepat di atas teks "Sisi".
+          Tersembunyi saat siap; terisi (kiri->kanan) selama cooldown. */}
+      <div
+        ref={cooldownWrapRef}
+        className="pointer-events-none absolute inset-x-0 flex justify-center"
+        style={{ bottom: `${COOLDOWN_BAR_BOTTOM_PX}px`, visibility: 'hidden' }}
+        aria-hidden
+      >
+        <div
+          className="relative overflow-hidden rounded-full border-2 border-ink bg-white/70"
+          style={{
+            width: `${COOLDOWN_BAR_WIDTH_PX}px`,
+            height: `${COOLDOWN_BAR_HEIGHT_PX}px`,
+          }}
+        >
+          {/* Isian cooldown (lebar diatur via rAF). */}
+          <div
+            ref={cooldownFillRef}
+            className="absolute inset-y-0 left-0 rounded-full bg-sun"
+            style={{ width: '0%' }}
+          />
+          {/* Ikon kapak di pojok kiri bar. */}
+          <div
+            className="absolute left-1 top-1/2 -translate-y-1/2"
+            style={{ width: `${COOLDOWN_ICON_SIZE_PX}px`, height: `${COOLDOWN_ICON_SIZE_PX}px` }}
+          >
+            <svg viewBox="0 0 24 24" className="h-full w-full">
+              {/* Kapak: mata besi + gagang kayu. */}
+              <rect x="11" y="3" width="2.4" height="18" rx="1" fill="#5c3a1a" />
+              <path d="M9 3h8c1.5 0 2.5 1.6 1.8 3l-1.4 2.6H9z" fill="#9e9e9e" stroke="#2b1d0e" strokeWidth="1.2" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      {/* Indikator sisi di bawah layar (di bawah bar cooldown). */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-1 text-center text-sm font-bold text-ink">
+        Sisi {getState().rotation + 1} / {SIDES}
       </div>
     </div>
   )

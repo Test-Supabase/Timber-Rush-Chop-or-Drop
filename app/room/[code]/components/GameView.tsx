@@ -144,7 +144,10 @@ export default function GameView() {
       phase: s.phase,
       transitionElapsed: s.transitionElapsed,
       hitSeq: s.hitSeq,
+      lastHit: s.lastHit,
       lastGain: s.lastGain,
+      lastSide: s.lastSide,
+      swingCooldown: s.swingCooldown,
     }
   }, [])
 

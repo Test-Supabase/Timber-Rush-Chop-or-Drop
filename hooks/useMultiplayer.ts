@@ -41,7 +41,10 @@ export interface TreeViewState {
   phase: 'playing' | 'transition' | 'over'
   transitionElapsed: number
   hitSeq?: number
+  lastHit?: 'correct' | 'wrong' | 'none'
   lastGain?: number
+  lastSide?: 'left' | 'right'
+  swingCooldown: number
 }
 
 const VIEW_COMMIT_INTERVAL = 100 // ms
@@ -116,6 +119,7 @@ export function useMultiplayer(playerName: string) {
         hits: 0,
         phase: 'over',
         transitionElapsed: 0,
+        swingCooldown: 0,
       }
     }
     return {
@@ -126,7 +130,10 @@ export function useMultiplayer(playerName: string) {
       phase: s.state.phase,
       transitionElapsed: s.state.transitionElapsed,
       hitSeq: s.state.hitSeq,
+      lastHit: s.state.lastHit,
       lastGain: s.state.lastGain,
+      lastSide: s.state.lastSide,
+      swingCooldown: s.state.swingCooldown,
     }
   }, [])
 
