@@ -1,21 +1,51 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 // Landing page: input nama + tombol Buat Room / Gabung Room.
-// Tahap Dev 1: hanya state lokal & navigasi placeholder (belum koneksi DB).
+// Dev 4: nama disimpan ke localStorage, navigasi ke /room/[code] berfungsi.
+
+function generateRoomCode(): string {
+  // 6 karakter alfanumerik uppercase.
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // tanpa I/O/0/1 agar tidak ambigu
+  let code = ''
+  for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length))
+  return code
+}
 
 export default function LandingPage() {
+  const router = useRouter()
   const [name, setName] = useState('')
   const [roomCode, setRoomCode] = useState('')
 
-  // Placeholder: kode 6 karakter dibuat lokal. Koneksi DB dikerjakan di Dev 4.
+  // Baca nama dari localStorage saat pertama kali mount.
+  useEffect(() => {
+    const stored = localStorage.getItem('timber-rush-player-name')
+    if (stored) setName(stored)
+  }, [])
+
+  // Simpan nama ke localStorage setiap kali berubah.
+  useEffect(() => {
+    if (name.trim()) localStorage.setItem('timber-rush-player-name', name.trim())
+  }, [name])
+
   const handleCreateRoom = () => {
-    alert(`TODO Dev 4: buat room sebagai "${name || 'Pemain'}"`)
+    const finalName = name.trim() || 'Pemain'
+    localStorage.setItem('timber-rush-player-name', finalName)
+    const code = generateRoomCode()
+    router.push(`/room/${code}?name=${encodeURIComponent(finalName)}`)
   }
 
   const handleJoinRoom = () => {
-    alert(`TODO Dev 4: gabung room "${roomCode.toUpperCase()}" sebagai "${name || 'Pemain'}"`)
+    const finalName = name.trim() || 'Pemain'
+    localStorage.setItem('timber-rush-player-name', finalName)
+    const code = roomCode.trim().toUpperCase()
+    if (code.length !== 6) {
+      alert('Kode room harus 6 karakter.')
+      return
+    }
+    router.push(`/room/${code}?name=${encodeURIComponent(finalName)}`)
   }
 
   return (
@@ -68,7 +98,8 @@ export default function LandingPage() {
         <button
           type="button"
           onClick={handleJoinRoom}
-          className="w-full rounded-xl border-4 border-ink bg-sun px-4 py-3 text-lg font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
+          disabled={roomCode.trim().length !== 6}
+          className="w-full rounded-xl border-4 border-ink bg-sun px-4 py-3 text-lg font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] disabled:opacity-50 active:translate-y-1 active:shadow-none"
         >
           Gabung Room
         </button>

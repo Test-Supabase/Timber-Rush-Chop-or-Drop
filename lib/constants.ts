@@ -27,5 +27,15 @@ export const SCORE_TREE_FELL = 50; // bonus pohon roboh
 // --- Room ---
 export const PLAYERS_PER_ROOM = 4; // pemain maks per room
 
+// --- AI lokal (Dev 3: 3 pemain dummy) ---
+export const AI_REACT_MIN = 0.8; // detik: jeda minimum antar keputusan AI
+export const AI_REACT_MAX = 1.6; // detik: jeda maksimum antar keputusan AI
+export const AI_ACCURACY = 0.75; // peluang AI memukul separuh yang benar (0..1)
+
 // --- UI ---
 export const TIMER_LOW_THRESHOLD = 3; // detik: timer/bar menyala merah bila di bawah ini
+
+// --- Jaringan / Realtime (Supabase) ---
+export const NET_TICK_HZ = 30; // laju simulasi host (langkah/detik)
+export const NET_BROADCAST_MS = 100; // interval siar snapshot host (ms)
+export const NET_COUNTDOWN_MS = 3000; // durasi hitung mundur sebelum mulai (ms)
