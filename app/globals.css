@@ -23,6 +23,23 @@
 
   /* Animasi getar untuk feedback defleksi. */
   --animate-shake: shake 0.3s ease-in-out;
+  /* Popup pukulan: muncul membesar, lalu memudar & naik. */
+  --animate-hit-pop: hitPop 900ms ease-out forwards;
+}
+
+@keyframes hitPop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -110%) scale(1);
+  }
 }
 
 /* Latar hutan: gradasi langit + bukit hijau sederhana (tanpa gambar eksternal). */

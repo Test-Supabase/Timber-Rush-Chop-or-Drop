@@ -6,6 +6,7 @@ import TreePanel from './TreePanel'
 import TimerBar from './TimerBar'
 import TopBar from './TopBar'
 import ResultView from './ResultView'
+import HitPopup from './HitPopup'
 
 export default function MultiplayerView() {
   const {
@@ -15,6 +16,7 @@ export default function MultiplayerView() {
     aliveCount,
     feedback,
     shake,
+    hitEvent,
     getMyState,
     handleStrike,
     handleRotate,
@@ -53,12 +55,13 @@ export default function MultiplayerView() {
         )}
 
         {/* TreePanel (untuk pemain yang dikontrol user) */}
-        <div className={`h-[420px] w-full max-w-md ${shakeStyle}`}>
+        <div className={`relative h-[420px] w-full max-w-md ${shakeStyle}`}>
           <TreePanel
             getState={getMyState}
             onStrike={handleStrike}
             onRotate={handleRotate}
           />
+          <HitPopup event={hitEvent} />
         </div>
 
         {/* Overlay bila pemain user sudah tereliminasi tapi match masih jalan */}

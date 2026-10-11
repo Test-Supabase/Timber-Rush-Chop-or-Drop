@@ -17,6 +17,7 @@ import {
   type MultiplayerState,
 } from '@/lib/multiplayerState'
 import type { HitSide, HitResult, RotateDir } from '@/lib/gameState'
+import type { HitEvent } from '@/lib/hitEffects'
 
 /** Cuplikan ringan untuk re-render React (bukan state penuh per frame). */
 interface LeaderRow {
@@ -39,6 +40,8 @@ export interface TreeViewState {
   hits: number
   phase: 'playing' | 'transition' | 'over'
   transitionElapsed: number
+  hitSeq?: number
+  lastGain?: number
 }
 
 const VIEW_COMMIT_INTERVAL = 100 // ms
@@ -53,6 +56,8 @@ export function useMultiplayer(playerName: string) {
   // Feedback pukulan salah.
   const [feedback, setFeedback] = useState<string | null>(null)
   const [shake, setShake] = useState(false)
+  // Popup pukulan (bintang "+poin" / kotak "MISS") untuk pemain kita.
+  const [hitEvent, setHitEvent] = useState<HitEvent | null>(null)
 
   const rafRef = useRef(0)
   const lastTimeRef = useRef(0)
@@ -120,6 +125,8 @@ export function useMultiplayer(playerName: string) {
       hits: s.state.hits,
       phase: s.state.phase,
       transitionElapsed: s.state.transitionElapsed,
+      hitSeq: s.state.hitSeq,
+      lastGain: s.state.lastGain,
     }
   }, [])
 
@@ -127,6 +134,17 @@ export function useMultiplayer(playerName: string) {
   const handleStrike = useCallback((side: HitSide) => {
     const result: HitResult = strikePlayer(stateRef.current, stateRef.current.myId, side) ?? 'ignored'
     if (result === 'ignored') return
+
+    // Popup di area batang untuk pemain kita.
+    const me = stateRef.current.players.find((p) => p.id === stateRef.current.myId)
+    if (me) {
+      setHitEvent({
+        seq: me.state.hitSeq,
+        result: result === 'wrong' ? 'wrong' : 'correct',
+        gain: me.state.lastGain,
+        side,
+      })
+    }
 
     if (result === 'wrong') {
       setFeedback('DEFLEKSI!')
@@ -153,6 +171,7 @@ export function useMultiplayer(playerName: string) {
     lastCommitRef.current = 0
     setFeedback(null)
     setShake(false)
+    setHitEvent(null)
   }, [playerName])
 
   return {
@@ -162,6 +181,7 @@ export function useMultiplayer(playerName: string) {
     aliveCount: alivePlayers(stateRef.current.players).length,
     feedback,
     shake,
+    hitEvent,
     getMyState,
     handleStrike,
     handleRotate,

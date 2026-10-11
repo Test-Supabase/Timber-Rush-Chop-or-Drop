@@ -17,6 +17,10 @@ interface TreePanelProps {
     hits: number
     phase: 'playing' | 'transition' | 'over'
     transitionElapsed: number
+    hitSeq?: number
+    lastHit?: 'correct' | 'wrong' | 'none'
+    lastGain?: number
+    lastSide?: 'left' | 'right'
   }
   onStrike: (side: 'left' | 'right') => void
   onRotate: (dir: 'left' | 'right') => void

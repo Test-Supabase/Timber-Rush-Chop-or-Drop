@@ -67,6 +67,11 @@ export interface PlayerNet {
   swingCooldown: number
   phase: 'playing' | 'transition' | 'over'
   transitionElapsed: number
+  // Hasil pukulan terakhir (untuk popup "+poin" / "MISS" di klien).
+  hitSeq: number
+  lastHit: 'correct' | 'wrong' | 'none'
+  lastGain: number
+  lastSide: HitSide
 }
 
 /** Snapshot ruangan (dikirim host -> klien). */
@@ -142,6 +147,10 @@ function toNet(p: PlayerState, id: string, name: string, ready: boolean, isBot: 
     swingCooldown: p.swingCooldown,
     phase: p.phase,
     transitionElapsed: p.transitionElapsed,
+    hitSeq: p.hitSeq,
+    lastHit: p.lastHit,
+    lastGain: p.lastGain,
+    lastSide: p.lastSide,
   }
 }
 

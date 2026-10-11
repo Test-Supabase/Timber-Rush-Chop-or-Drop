@@ -15,6 +15,7 @@ import TreePanel from './TreePanel'
 import TimerBar from './TimerBar'
 import TopBar from './TopBar'
 import ResultView from './ResultView'
+import HitPopup, { type HitEvent } from './HitPopup'
 
 interface RealtimeViewProps {
   roomCode: string
@@ -95,8 +96,24 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
       hits: s?.hits ?? 0,
       phase: s?.phase ?? 'over',
       transitionElapsed: s?.transitionElapsed ?? 0,
+      hitSeq: s?.hitSeq ?? 0,
+      lastHit: s?.lastHit ?? 'none',
+      lastGain: s?.lastGain ?? 0,
+      lastSide: s?.lastSide ?? 'left',
     }
   }, [getMyState, getPlayerState, isSpectating, watchingId])
+
+  // Sinyal popup pukulan (dihitung tiap render; HitPopup hanya bereaksi saat seq berubah).
+  const activeState = isSpectating && watchingId ? getPlayerState(watchingId) : getMyState()
+  const hitSignal: HitEvent | null =
+    activeState && activeState.lastHit !== 'none'
+      ? {
+          seq: activeState.hitSeq,
+          result: activeState.lastHit === 'wrong' ? 'wrong' : 'correct',
+          gain: activeState.lastGain,
+          side: activeState.lastSide,
+        }
+      : null
 
   // ---- Input keyboard khusus Windows ----
   // A = geser kiri, D = geser kanan, J = pukul kiri, L = pukul kanan.
@@ -393,6 +410,9 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
       <div className="absolute inset-0 z-0 flex items-center justify-center">
         <div className="relative h-full w-full max-w-md">
           <TreePanel getState={treeState} onStrike={handleStrike} onRotate={handleRotate} />
+
+          {/* Popup pukulan (bintang "+poin" / kotak "MISS") di area batang. */}
+          <HitPopup event={isSpectating ? null : hitSignal} />
 
           {/* Feedback DEFLEKSI! — overlay di tengah */}
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

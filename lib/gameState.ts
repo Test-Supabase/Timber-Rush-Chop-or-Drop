@@ -36,6 +36,11 @@ export interface PlayerState {
   swingCooldown: number // sisa jeda ayunan (detik)
   phase: Phase // fase permainan
   transitionElapsed: number // waktu berjalan selama transisi (detik)
+  // Hasil pukulan terakhir (untuk popup di klien).
+  hitSeq: number // nomor urut pukulan (naik tiap ayunan yang diproses)
+  lastHit: 'correct' | 'wrong' | 'none' // hasil pukulan terakhir
+  lastGain: number // poin yang didapat dari pukulan terakhir (0 bila salah)
+  lastSide: HitSide // sisi yang dipukul pada ayunan terakhir
 }
 
 // Kurva MAX time: menyusut MAXTIME_STEP detik per pohon, lantai MAXTIME_FLOOR.
@@ -64,6 +69,10 @@ export function createPlayerState(): PlayerState {
     swingCooldown: 0,
     phase: 'playing',
     transitionElapsed: 0,
+    hitSeq: 0,
+    lastHit: 'none',
+    lastGain: 0,
+    lastSide: 'left',
   }
 }
 
@@ -105,20 +114,27 @@ export function strike(state: PlayerState, side: HitSide): HitResult {
 
   // Setiap ayunan memicu cooldown.
   state.swingCooldown = SWING_COOLDOWN
+  // Catat hasil ayunan ini untuk popup di klien.
+  state.hitSeq += 1
+  state.lastSide = side
 
   if (correct) {
     state.hits += 1
     state.score += SCORE_CORRECT_HIT
+    let gain = SCORE_CORRECT_HIT
     // Tambahan waktu saat pukul benar (0 sesuai spesifikasi => tidak berubah).
     state.timeLeft = Math.min(state.maxTime, state.timeLeft + CORRECT_HIT_RECOVERY)
 
     if (state.hits >= HITS_TO_FELL) {
       // Pohon roboh: bonus + mulai transisi.
       state.score += SCORE_TREE_FELL
+      gain += SCORE_TREE_FELL
       state.phase = 'transition'
       state.transitionElapsed = 0
       state.swingCooldown = SWING_COOLDOWN // cooldown di-reset penuh
     }
+    state.lastHit = 'correct'
+    state.lastGain = gain
     return 'correct'
   }
 
@@ -127,6 +143,8 @@ export function strike(state: PlayerState, side: HitSide): HitResult {
   if (state.timeLeft <= 0) {
     state.phase = 'over'
   }
+  state.lastHit = 'wrong'
+  state.lastGain = 0
   return 'wrong'
 }
 

@@ -16,6 +16,7 @@ import {
 } from '@/lib/gameState'
 import TreePanel from './TreePanel'
 import TimerBar from './TimerBar'
+import HitPopup, { type HitEvent } from './HitPopup'
 
 export default function GameView() {
   // State permainan (mutable) di ref — tidak memicu re-render.
@@ -36,6 +37,8 @@ export default function GameView() {
   // Feedback "DEFLEKSI!" + getar layar.
   const [feedback, setFeedback] = useState<string | null>(null)
   const [shake, setShake] = useState(false)
+  // Popup pukulan (bintang "+poin" / kotak "MISS").
+  const [hitEvent, setHitEvent] = useState<HitEvent | null>(null)
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const rafRef = useRef<number>(0)
@@ -79,6 +82,14 @@ export default function GameView() {
     lastAimRef.current = side
     const result: HitResult = strike(stateRef.current, side)
     if (result === 'ignored') return
+    const s = stateRef.current
+    // Popup di area batang: bintang "+poin" bila benar, kotak "MISS" bila salah.
+    setHitEvent({
+      seq: s.hitSeq,
+      result: result === 'wrong' ? 'wrong' : 'correct',
+      gain: s.lastGain,
+      side,
+    })
     if (result === 'wrong') {
       setFeedback('DEFLEKSI!')
       setShake(true)
@@ -132,6 +143,8 @@ export default function GameView() {
       hits: s.hits,
       phase: s.phase,
       transitionElapsed: s.transitionElapsed,
+      hitSeq: s.hitSeq,
+      lastGain: s.lastGain,
     }
   }, [])
 
@@ -143,8 +156,9 @@ export default function GameView() {
 
       <TimerBar timeLeft={view.timeLeft} maxTime={view.maxTime} />
 
-      <div className={`h-[420px] w-full max-w-md ${shake ? 'animate-shake' : ''}`}>
+      <div className={`relative h-[420px] w-full max-w-md ${shake ? 'animate-shake' : ''}`}>
         <TreePanel getState={getState} onStrike={handleStrike} onRotate={handleRotate} />
+        <HitPopup event={hitEvent} />
       </div>
 
       <div className="h-8">

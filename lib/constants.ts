@@ -47,6 +47,15 @@ export const AI_ACCURACY = 0.75; // peluang AI memukul separuh yang benar (0..1)
 // --- UI ---
 export const TIMER_LOW_THRESHOLD = 3; // detik: timer/bar menyala merah bila di bawah ini
 
+// --- Efek pukulan (popup "+poin" dan "MISS" di area batang) ---
+export const HIT_POPUP_MS = 900; // ms: durasi animasi popup
+export const HIT_STAR_POINTS = 12; // jumlah ujung bintang "surprise" (tajam)
+export const HIT_STAR_INNER = 0.7; // rasio jari-jari dalam bintang (0..1), makin kecil makin tajam
+export const HIT_POPUP_LEFT_PCT = 28; // % lebar: posisi popup untuk pukulan sisi kiri
+export const HIT_POPUP_RIGHT_PCT = 72; // % lebar: posisi popup untuk pukulan sisi kanan
+export const HIT_POPUP_TOP_MIN_PCT = 30; // % tinggi: batas atas area popup
+export const HIT_POPUP_TOP_RANGE_PCT = 40; // % tinggi: rentang vertikal area popup
+
 // --- Jaringan / Realtime (Supabase) ---
 export const NET_TICK_HZ = 30; // laju simulasi host (langkah/detik)
 export const NET_BROADCAST_MS = 100; // interval siar snapshot host (ms)
