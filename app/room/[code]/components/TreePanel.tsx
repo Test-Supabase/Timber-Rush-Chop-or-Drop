@@ -234,9 +234,6 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
 
     // Retak horizontal (bekas tebasan kapak) di sisi rapuh.
     // Satu retak yang bertambah LEBAR tiap pukulan benar, dengan rongga gelap.
-    const hits = Math.max(0, s.hits) // jumlah pukulan benar sebenarnya
-    const length = 30 + hits * 26 // lebar horizontal (bertambah tiap pukulan)
-    const halfH = 11 + hits * 6 // tinggi bukaan retak
     if (s.rotation === s.fragileSide && s.phase === 'playing') {
       const isLeftHalf = s.fragileHalf === 0
       const inward = isLeftHalf ? 1 : -1 // arah retak masuk ke dalam kayu
@@ -245,7 +242,7 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
       // Titik buka retak di tepi batang (sisi rapuh).
       const edgeX = isLeftHalf ? x0 + edge.left[idx] : x1 - edge.right[idx]
 
-      const hits = Math.max(1, s.hits) // jumlah pukulan benar sebenarnya
+      const hits = Math.max(0, s.hits) // jumlah pukulan benar sebenarnya
       const length = 30 + hits * 26 // lebar horizontal (bertambah tiap pukulan)
       const halfH = 11 + hits * 6 // tinggi bukaan retak
       const tipX = edgeX + inward * length
