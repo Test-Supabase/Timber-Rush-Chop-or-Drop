@@ -97,9 +97,9 @@ export default function ResultView({ players, myRank, onRestart }: ResultViewPro
         <button
           type="button"
           onClick={() => router.push('/')}
-          className="rounded-xl border-4 border-ink bg-sky px-6 py-3 text-lg font-extrabold text-white shadow-[0_4px_0_#2b1d0e] transition-all hover:translate-y-0.5 hover:shadow-[0_2px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
+          className="rounded-xl border-4 border-ink bg-sky px-6 py-3 text-lg font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] transition-all hover:translate-y-0.5 hover:shadow-[0_2px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
         >
-          Keluar
+          ← Kembali ke Lobby
         </button>
       </div>
     </div>

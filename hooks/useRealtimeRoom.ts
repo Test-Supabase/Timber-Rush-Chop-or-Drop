@@ -650,6 +650,13 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     return r.players.find((p) => p.id === myIdRef.current) ?? null
   }, [])
 
+  // ---- Snapshot state pemain lain (untuk mode tonton / spectator) ----
+  const getPlayerState = useCallback((id: string): PlayerNet | null => {
+    const r = latestRef.current
+    if (!r) return null
+    return r.players.find((p) => p.id === id) ?? null
+  }, [])
+
   // ---- Baris leaderboard (diturunkan dari snapshot) ----
   const rows: RealtimeRow[] = room.players
     .map((p) => ({
@@ -704,5 +711,6 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     sendRemoveBot,
     startMatch,
     getMyState,
+    getPlayerState,
   }
 }

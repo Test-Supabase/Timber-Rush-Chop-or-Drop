@@ -8,6 +8,7 @@
 // - ResultView muncul saat host menyatakan pertandingan selesai.
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useRealtimeRoom } from '@/hooks/useRealtimeRoom'
 import { MIN_PLAYERS_TO_START, PLAYERS_PER_ROOM } from '@/lib/constants'
 import TreePanel from './TreePanel'
@@ -45,9 +46,13 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
     sendRemoveBot,
     startMatch,
     getMyState,
+    getPlayerState,
   } = useRealtimeRoom(roomCode, playerName)
 
+  const router = useRouter()
   const [feedback, setFeedback] = useState<string | null>(null)
+  // Id pemain yang sedang ditonton (mode spektator). null = lihat pohon sendiri.
+  const [watchingId, setWatchingId] = useState<string | null>(null)
 
   // Pesan status tombol Mulai.
   function getStartHint(count: number, allReady: boolean): string {
@@ -59,24 +64,30 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
 
   const me = rows.find((r) => r.isMe)
   const amIAlive = me?.alive ?? true
+  // Pemain yang sudah kalah hanya boleh menonton; input dimatikan.
+  const canWatch = !amIAlive
+  const watched = watchingId ? rows.find((r) => r.id === watchingId) : undefined
+  const isSpectating = canWatch && !!watched
 
   const handleStrike = useCallback(
     (side: 'left' | 'right') => {
+      if (!amIAlive) return
       sendInput(side)
     },
-    [sendInput]
+    [sendInput, amIAlive]
   )
 
   const handleRotate = useCallback(
     (dir: 'left' | 'right') => {
+      if (!amIAlive) return
       sendRotate(dir)
     },
-    [sendRotate]
+    [sendRotate, amIAlive]
   )
 
-  // getState untuk TreePanel: ubah PlayerNet -> bentuk yang dibutuhkan.
+  // getState untuk TreePanel: pohon sendiri, atau pohon pemain yang ditonton.
   const treeState = useCallback(() => {
-    const s = getMyState()
+    const s = isSpectating && watchingId ? getPlayerState(watchingId) : getMyState()
     return {
       rotation: s?.rotation ?? 0,
       fragileSide: s?.fragileSide ?? 0,
@@ -85,15 +96,16 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
       phase: s?.phase ?? 'over',
       transitionElapsed: s?.transitionElapsed ?? 0,
     }
-  }, [getMyState])
+  }, [getMyState, getPlayerState, isSpectating, watchingId])
 
   // ---- Input keyboard khusus Windows ----
   // A = geser kiri, D = geser kanan, J = pukul kiri, L = pukul kanan.
-  // Hanya aktif saat layar bermain agar tidak mengganggu lobby/result.
+  // Hanya aktif saat layar bermain dan pemain masih hidup (bukan spektator).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return // abaikan auto-repeat saat tombol ditahan
       if (phase !== 'playing') return
+      if (!amIAlive) return
       // Jangan tangkap saat pengguna sedang mengetik di input.
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) {
@@ -125,7 +137,7 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [phase, sendInput, sendRotate])
+  }, [phase, amIAlive, sendInput, sendRotate])
 
   // ---- Layar koneksi ----
   if (connState === 'connecting') {
@@ -338,27 +350,43 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
     <div className="relative min-h-screen p-4">
       {/* SIDEBAR LEADERBOARD + TIMER (KANAN) — di depan agar tetap dapat diklik */}
       <div className="relative z-10 ml-auto flex w-40 flex-shrink-0 flex-col items-center gap-4">
-        <TopBar players={rows} myId={myId} />
+        <TopBar
+          players={rows}
+          myId={myId}
+          canWatch={canWatch}
+          watchingId={isSpectating ? watchingId : null}
+          onWatch={(id) => setWatchingId((cur) => (cur === id ? null : id))}
+        />
         <TimerBar timeLeft={me?.timeLeft ?? 0} maxTime={me?.maxTime ?? 30} />
-        {me && (
+        {me && !isSpectating && (
           <div className="text-center text-xs font-bold text-ink/70">
             Pohon #{me.treeIndex} • Skor {me.score}
           </div>
         )}
+        {isSpectating && watched && (
+          <div className="text-center text-xs font-bold text-bark-dark">
+            👁️ Menonton: {watched.name}
+            <div className="text-[10px] text-ink/60">
+              Pohon #{watched.treeIndex} • Skor {watched.score}
+            </div>
+          </div>
+        )}
 
         {/* Petunjuk kontrol keyboard (khusus Windows) */}
-        <div className="mt-auto flex flex-col items-center gap-1 text-[10px] font-bold text-ink/55">
-          <span>
-            <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">A</kbd>{' '}
-            <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">D</kbd>{' '}
-            Geser
-          </span>
-          <span>
-            <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">J</kbd>{' '}
-            <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">L</kbd>{' '}
-            Pukul
-          </span>
-        </div>
+        {amIAlive && (
+          <div className="mt-auto flex flex-col items-center gap-1 text-[10px] font-bold text-ink/55">
+            <span>
+              <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">A</kbd>{' '}
+              <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">D</kbd>{' '}
+              Geser
+            </span>
+            <span>
+              <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">J</kbd>{' '}
+              <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">L</kbd>{' '}
+              Pukul
+            </span>
+          </div>
+        )}
       </div>
 
       {/* BATANG POHON (TENGAH) — tinggi penuh & terpusat horizontal */}
@@ -377,11 +405,21 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
 
           {/* Overlay eliminasi */}
           {!amIAlive && (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40">
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/40">
               <div className="text-3xl font-extrabold text-white">TERELIMINASI!</div>
-              <div className="mt-2 text-lg font-bold text-white">
-                Menonton {rows.filter((r) => r.alive).length} pemain tersisa…
+              <div className="text-lg font-bold text-white">
+                Menonton {rows.filter((r) => r.alive).length} pemain tersisa...
               </div>
+              <div className="max-w-[16rem] text-center text-xs font-bold text-white/80">
+                Klik nama pemain di papan skor untuk menonton 👁️
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                className="mt-2 rounded-xl border-4 border-ink bg-sky px-6 py-3 text-lg font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
+              >
+                ← Kembali
+              </button>
             </div>
           )}
         </div>
