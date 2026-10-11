@@ -19,11 +19,7 @@ export default async function RoomPage({
   const playerName = search.name?.trim() || 'Pemain'
 
   return (
-    <main className="min-h-screen">
-      {/* Penanda kode room; digunakan untuk channel `room:<code>` */}
-      <div className="pt-4 text-center text-sm font-bold text-ink/60">
-        ROOM {code.toUpperCase()}
-      </div>
+    <main className="h-screen overflow-hidden">
       <RealtimeView roomCode={code} playerName={playerName} />
     </main>
   )

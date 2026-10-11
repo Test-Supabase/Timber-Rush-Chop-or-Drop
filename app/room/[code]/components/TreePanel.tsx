@@ -232,75 +232,73 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     ctx.stroke()
     ctx.setLineDash([])
 
-    // Sobek horizontal di pinggir kayu (bekas tebasan kapak).
-    // Hanya muncul bila sisi rapuh sedang menghadap.
+    // Retak horizontal (bekas tebasan kapak) di sisi rapuh.
+    // Satu retak yang bertambah LEBAR tiap pukulan benar, dengan rongga gelap.
     if (s.rotation === s.fragileSide && s.phase === 'playing') {
-      const tearSide = s.fragileHalf === 0 ? -1 : 1 // -1 = kiri, 1 = kanan
-      const tearCount = Math.max(1, s.hits)
+      const isLeftHalf = s.fragileHalf === 0
+      const inward = isLeftHalf ? 1 : -1 // arah retak masuk ke dalam kayu
+      const yc = (y0 + y1) / 2 // posisi vertikal retak (tengah batang)
+      const idx = edgeIndex(yc, y0, y1)
+      // Titik buka retak di tepi batang (sisi rapuh).
+      const edgeX = isLeftHalf ? x0 + edge.left[idx] : x1 - edge.right[idx]
 
-      for (let i = 0; i < s.hits; i++) {
-        const t = (i + 1) / (tearCount + 1)
-        const yc = y0 + (y1 - y0) * (0.18 + t * 0.64)
-        const idx = edgeIndex(yc, y0, y1)
-        // Titik tepi batang pada sisi sobek.
-        const edgeX =
-          tearSide === -1 ? x0 + edge.left[idx] : x1 - edge.right[idx]
+      const hits = Math.max(1, s.hits) // minimal 1 = petunjuk sisi rapuh
+      const length = 30 + hits * 26 // lebar horizontal (bertambah tiap pukulan)
+      const halfH = 11 + hits * 6 // tinggi bukaan retak
+      const tipX = edgeX + inward * length
 
-        // Ukuran sobek: makin banyak pukulan makin panjang & lebar.
-        const depth = 16 + i * 9 // panjang horizontal ke dalam kayu
-        const gap = 4 + i * 1.5 // bukaan vertikal (tinggi sobek)
+      // 1) Rongga retak GELAP (area gelap yang tersisa di bagian retak).
+      ctx.fillStyle = '#140b03'
+      ctx.beginPath()
+      ctx.moveTo(edgeX, yc - halfH)
+      ctx.quadraticCurveTo(
+        edgeX + inward * length * 0.6,
+        yc - halfH * 0.3,
+        tipX,
+        yc
+      )
+      ctx.quadraticCurveTo(
+        edgeX + inward * length * 0.6,
+        yc + halfH * 0.3,
+        edgeX,
+        yc + halfH
+      )
+      ctx.closePath()
+      ctx.fill()
 
-        // 1) Rongga gelap (bayangan) — menyisakan area gelap di bekas sobek.
-        ctx.fillStyle = 'rgba(26,17,8,0.85)'
-        ctx.beginPath()
-        ctx.moveTo(edgeX, yc - gap)
-        ctx.quadraticCurveTo(
-          edgeX + tearSide * depth * 0.55,
-          yc - gap * 0.5,
-          edgeX + tearSide * depth,
-          yc
-        )
-        ctx.quadraticCurveTo(
-          edgeX + tearSide * depth * 0.55,
-          yc + gap * 0.5,
-          edgeX,
-          yc + gap
-        )
-        ctx.closePath()
-        ctx.fill()
+      // 2) Bibir kayu baru TERANG di atas & bawah retak (kontras tinggi).
+      ctx.strokeStyle = '#f2e0b4'
+      ctx.lineWidth = 3.5
+      ctx.beginPath()
+      ctx.moveTo(edgeX, yc - halfH)
+      ctx.quadraticCurveTo(
+        edgeX + inward * length * 0.6,
+        yc - halfH * 0.3,
+        tipX,
+        yc
+      )
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(edgeX, yc + halfH)
+      ctx.quadraticCurveTo(
+        edgeX + inward * length * 0.6,
+        yc + halfH * 0.3,
+        tipX,
+        yc
+      )
+      ctx.stroke()
 
-        // 2) Bagian terkelupas (kayu baru terang) — horizontal, sedikit terhapus.
-        ctx.fillStyle = 'rgba(196,160,110,0.55)'
-        ctx.beginPath()
-        ctx.moveTo(edgeX, yc - gap * 0.45)
-        ctx.quadraticCurveTo(
-          edgeX + tearSide * depth * 0.5,
-          yc - gap * 0.25,
-          edgeX + tearSide * depth * 0.92,
-          yc
-        )
-        ctx.quadraticCurveTo(
-          edgeX + tearSide * depth * 0.5,
-          yc + gap * 0.25,
-          edgeX,
-          yc + gap * 0.45
-        )
-        ctx.closePath()
-        ctx.fill()
-
-        // 3) Garis tepi sobek tipis agar terlihat tajam.
-        ctx.strokeStyle = 'rgba(230,200,150,0.4)'
-        ctx.lineWidth = 1.2
-        ctx.beginPath()
-        ctx.moveTo(edgeX, yc - gap)
-        ctx.quadraticCurveTo(
-          edgeX + tearSide * depth * 0.55,
-          yc - gap * 0.5,
-          edgeX + tearSide * depth,
-          yc
-        )
-        ctx.stroke()
-      }
+      // 3) Retakan rambut menjalar dari ujung (kayu mulai pecah).
+      ctx.strokeStyle = 'rgba(20,12,4,0.85)'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(tipX, yc)
+      ctx.lineTo(tipX + inward * 24, yc - halfH * 0.9)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(tipX, yc)
+      ctx.lineTo(tipX + inward * 18, yc + halfH * 1.1)
+      ctx.stroke()
     }
 
     ctx.globalAlpha = 1
