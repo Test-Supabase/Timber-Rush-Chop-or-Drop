@@ -34,6 +34,7 @@ import {
 } from '@/lib/gameState'
 import {
   PLAYERS_PER_ROOM,
+  MIN_PLAYERS_TO_START,
   NET_TICK_HZ,
   NET_BROADCAST_MS,
   NET_COUNTDOWN_MS,
@@ -45,6 +46,7 @@ import {
 export interface PlayerNet {
   id: string
   name: string
+  ready: boolean
   rotation: number
   fragileSide: number
   fragileHalf: 0 | 1
@@ -61,7 +63,7 @@ export interface PlayerNet {
 /** Snapshot ruangan (dikirim host -> klien). */
 interface RoomNet {
   hostId: string
-  phase: 'countdown' | 'playing' | 'result'
+  phase: 'lobby' | 'countdown' | 'playing' | 'result'
   countdown: number // sisa detik countdown
   winnerId: string | null
   players: PlayerNet[]
@@ -89,6 +91,7 @@ export interface RealtimeRow {
 type QueueItem =
   | { kind: 'strike'; playerId: string; side: HitSide }
   | { kind: 'rotate'; playerId: string; dir: 'left' | 'right' }
+  | { kind: 'ready'; playerId: string; ready: boolean }
 
 // ID klien acak (tanpa auth). Cukup unik per browser/tab.
 function randomId(): string {
@@ -96,10 +99,11 @@ function randomId(): string {
 }
 
 // Ubah PlayerState (internal) -> PlayerNet (wire).
-function toNet(p: PlayerState, id: string, name: string): PlayerNet {
+function toNet(p: PlayerState, id: string, name: string, ready: boolean): PlayerNet {
   return {
     id,
     name,
+    ready,
     rotation: p.rotation,
     fragileSide: p.fragileSide,
     fragileHalf: p.fragileHalf,
@@ -137,7 +141,7 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
 
   const [room, setRoom] = useState<RoomNet>({
     hostId: '',
-    phase: 'countdown',
+    phase: 'lobby',
     countdown: NET_COUNTDOWN_MS / 1000,
     winnerId: null,
     players: [],
@@ -151,9 +155,10 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
   // ---- Ref simulasi (hanya dipakai host) ----
   const hostStateRef = useRef<Map<string, PlayerState>>(new Map())
   const hostNameRef = useRef<Map<string, string>>(new Map())
+  const readyRef = useRef<Map<string, boolean>>(new Map()) // status "Siap" per pemain
   const orderRef = useRef<string[]>([]) // urutan pemain = urutan leaderboard stabil
   const queueRef = useRef<QueueItem[]>([])
-  const phaseRef = useRef<'countdown' | 'playing' | 'result'>('countdown')
+  const phaseRef = useRef<'lobby' | 'countdown' | 'playing' | 'result'>('lobby')
   const countdownRef = useRef(NET_COUNTDOWN_MS / 1000)
   const winnerRef = useRef<string | null>(null)
   const hostIdRef = useRef<string>('')
@@ -178,7 +183,9 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     for (const id of orderRef.current) {
       const st = hostStateRef.current.get(id)
       if (!st) continue
-      players.push(toNet(st, id, hostNameRef.current.get(id) ?? 'Pemain'))
+      players.push(
+        toNet(st, id, hostNameRef.current.get(id) ?? 'Pemain', readyRef.current.get(id) ?? false)
+      )
     }
     return {
       hostId: hostIdRef.current,
@@ -204,6 +211,10 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     const q = queueRef.current
     queueRef.current = []
     for (const item of q) {
+      if (item.kind === 'ready') {
+        readyRef.current.set(item.playerId, item.ready)
+        continue
+      }
       const st = hostStateRef.current.get(item.playerId)
       if (!st) continue
       if (item.kind === 'strike') strike(st, item.side)
@@ -213,6 +224,11 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
 
   // ---- Langkah simulasi host ----
   const hostStep = useCallback((dt: number) => {
+    // Fase lobby: tidak ada simulasi; hanya proses input "siap" lalu tunggu host memulai.
+    if (phaseRef.current === 'lobby') {
+      applyQueue()
+      return
+    }
     // Fase countdown: tunggu lalu mulai.
     if (phaseRef.current === 'countdown') {
       countdownRef.current = Math.max(0, countdownRef.current - dt)
@@ -278,6 +294,7 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
         if (!hostStateRef.current.has(id)) {
           hostStateRef.current.set(id, createPlayerState())
           hostNameRef.current.set(id, byId.get(id)?.name ?? 'Pemain')
+          readyRef.current.set(id, false) // default belum siap
           orderRef.current.push(id)
         } else {
           hostNameRef.current.set(id, byId.get(id)?.name ?? 'Pemain')
@@ -288,6 +305,7 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
           orderRef.current = orderRef.current.filter((x) => x !== id)
           hostStateRef.current.delete(id)
           hostNameRef.current.delete(id)
+          readyRef.current.delete(id)
         }
       }
       broadcastRoom()
@@ -311,7 +329,9 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     ch.on('broadcast', { event: 'input' }, ({ payload }: { payload: any }) => {
       if (!getIsHost()) return
       if (!payload?.playerId) return
-      if (payload.kind === 'strike' && payload.side) {
+      if (payload.kind === 'ready' && typeof payload.ready === 'boolean') {
+        queueRef.current.push({ kind: 'ready', playerId: payload.playerId, ready: payload.ready })
+      } else if (payload.kind === 'strike' && payload.side) {
         queueRef.current.push({ kind: 'strike', playerId: payload.playerId, side: payload.side })
       } else if (payload.kind === 'rotate' && payload.dir) {
         queueRef.current.push({ kind: 'rotate', playerId: payload.playerId, dir: payload.dir })
@@ -405,6 +425,35 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     ch.send({ type: 'broadcast', event: 'input', payload }).catch(() => {})
   }, [getIsHost])
 
+  // ---- Aksi lobby: siap / mulai ----
+  // Siap: setiap pemain (termasuk host) menekan "Siap" sendiri.
+  const sendReady = useCallback((ready: boolean) => {
+    if (getIsHost()) {
+      queueRef.current.push({ kind: 'ready', playerId: myIdRef.current, ready })
+      return
+    }
+    const ch = channelRef.current
+    if (!ch) return
+    ch.send({
+      type: 'broadcast',
+      event: 'input',
+      payload: { kind: 'ready', playerId: myIdRef.current, ready },
+    }).catch(() => {})
+  }, [getIsHost])
+
+  // Mulai: hanya host, hanya bila >= MIN_PLAYERS_TO_START dan semua sudah siap.
+  const startMatch = useCallback(() => {
+    if (!getIsHost()) return
+    if (phaseRef.current !== 'lobby') return
+    applyQueue() // pastikan input "siap" terbaru sudah diterapkan
+    const ids = orderRef.current
+    if (ids.length < MIN_PLAYERS_TO_START) return
+    if (!ids.every((id) => readyRef.current.get(id))) return
+    phaseRef.current = 'countdown'
+    countdownRef.current = NET_COUNTDOWN_MS / 1000
+    broadcastRoom()
+  }, [getIsHost, applyQueue, broadcastRoom])
+
   // ---- Snapshot state pemain SAYA (untuk TreePanel), dari ref tanpa re-render ----
   const getMyState = useCallback((): PlayerNet | null => {
     const r = latestRef.current
@@ -439,11 +488,14 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     phase: room.phase,
     countdown: room.countdown,
     winnerId: room.winnerId,
+    hostId: room.hostId,
     isHost,
     connState,
     error,
     sendInput,
     sendRotate,
+    sendReady,
+    startMatch,
     getMyState,
   }
 }

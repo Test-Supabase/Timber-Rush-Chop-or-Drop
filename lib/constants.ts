@@ -26,6 +26,7 @@ export const SCORE_TREE_FELL = 50; // bonus pohon roboh
 
 // --- Room ---
 export const PLAYERS_PER_ROOM = 4; // pemain maks per room
+export const MIN_PLAYERS_TO_START = 2; // pemain minimum & semua harus "Siap" sebelum host bisa mulai
 export const ROOM_CODE_LENGTH = 6; // panjang kode room
 export const ROOM_TTL_HOURS = 6; // jam: umur maksimum room sebelum kedaluwarsa
 export const PUBLIC_ROOMS_REFRESH_MS = 10000; // ms: interval segarkan daftar room publik

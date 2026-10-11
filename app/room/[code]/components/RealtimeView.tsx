@@ -9,6 +9,7 @@
 
 import { useCallback, useState } from 'react'
 import { useRealtimeRoom } from '@/hooks/useRealtimeRoom'
+import { MIN_PLAYERS_TO_START, PLAYERS_PER_ROOM } from '@/lib/constants'
 import TreePanel from './TreePanel'
 import TimerBar from './TimerBar'
 import TopBar from './TopBar'
@@ -26,15 +27,27 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
     phase,
     countdown,
     winnerId,
+    players,
+    hostId,
     isHost,
     connState,
     error,
     sendInput,
     sendRotate,
+    sendReady,
+    startMatch,
     getMyState,
   } = useRealtimeRoom(roomCode, playerName)
 
   const [feedback, setFeedback] = useState<string | null>(null)
+
+  // Pesan status tombol Mulai.
+  function getStartHint(count: number, allReady: boolean): string {
+    if (count < MIN_PLAYERS_TO_START)
+      return `Butuh ${MIN_PLAYERS_TO_START - count} pemain lagi untuk mulai`
+    if (!allReady) return 'Semua pemain harus siap'
+    return 'Mulai!'
+  }
 
   const me = rows.find((r) => r.isMe)
   const amIAlive = me?.alive ?? true
@@ -90,6 +103,99 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
         >
           Coba Lagi
         </button>
+      </div>
+    )
+  }
+
+  // ---- Layar lobby (antrian): siap per pemain + tombol Mulai (host) ----
+  if (phase === 'lobby') {
+    const amIReady = players.find((p) => p.id === myId)?.ready ?? false
+    const allReady = players.length > 0 && players.every((p) => p.ready)
+    const enoughPlayers = players.length >= MIN_PLAYERS_TO_START
+    const canStart = enoughPlayers && allReady
+
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-4">
+        <div className="text-center">
+          <div className="text-3xl font-extrabold text-bark-dark">Ruang Tunggu</div>
+          <div className="text-sm font-bold text-ink/60">
+            Room {roomCode.toUpperCase()} • {players.length}/{PLAYERS_PER_ROOM} pemain
+          </div>
+        </div>
+
+        {/* Daftar pemain + status siap */}
+        <div className="w-full max-w-md rounded-3xl border-4 border-ink bg-white/90 p-5 shadow-xl">
+          <h2 className="mb-3 text-center text-lg font-extrabold text-bark-dark">
+            Pemain ({players.length})
+          </h2>
+          <ul className="space-y-2">
+            {players.map((p) => {
+              const isMe = p.id === myId
+              const isHostPlayer = p.id === hostId
+              return (
+                <li
+                  key={p.id}
+                  className={`flex items-center justify-between rounded-xl border-2 px-3 py-2 ${
+                    isMe ? 'border-leaf bg-leaf/10' : 'border-ink/20 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">
+                      {isMe ? '👤 ' : ''}
+                      <span className="font-extrabold text-ink">
+                        {p.name}
+                        {isMe ? ' (Anda)' : ''}
+                      </span>
+                    </span>
+                    {isHostPlayer && (
+                      <span className="rounded-full bg-sun px-2 py-0.5 text-xs font-extrabold text-ink">
+                        Host
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${
+                      p.ready ? 'bg-leaf text-white' : 'bg-ink/10 text-ink/60'
+                    }`}
+                  >
+                    {p.ready ? 'Siap ✓' : 'Menunggu…'}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+
+          {/* Tombol Siap (semua pemain) */}
+          <button
+            type="button"
+            onClick={() => sendReady(!amIReady)}
+            className={`mt-4 w-full rounded-xl border-4 border-ink px-4 py-3 text-lg font-extrabold shadow-[0_4px_0_#2b1d0e] active:translate-y-1 active:shadow-none ${
+              amIReady ? 'bg-sun text-ink' : 'bg-leaf text-white'
+            }`}
+          >
+            {amIReady ? 'Batal Siap' : 'Saya Siap'}
+          </button>
+
+          {/* Tombol Mulai (host saja) */}
+          {isHost && (
+            <button
+              type="button"
+              onClick={startMatch}
+              disabled={!canStart}
+              className="mt-3 w-full rounded-xl border-4 border-ink bg-leaf px-4 py-3 text-lg font-extrabold text-white shadow-[0_4px_0_#2b1d0e] disabled:opacity-50 active:translate-y-1 active:shadow-none"
+            >
+              {canStart ? 'Mulai!' : getStartHint(players.length, allReady)}
+            </button>
+          )}
+
+          {!isHost && (
+            <div className="mt-3 text-center text-sm font-bold text-ink/60">
+              {canStart
+                ? 'Menunggu host memulai…'
+                : getStartHint(players.length, allReady)}
+            </div>
+          )}
+        </div>
       </div>
     )
   }
