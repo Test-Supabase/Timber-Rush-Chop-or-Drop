@@ -62,6 +62,12 @@ function getTrunkEdge(side: number, trunkW: number): TrunkEdge {
   return edge
 }
 
+// Indeks sampel tepi terdekat untuk posisi Y tertentu.
+function edgeIndex(y: number, y0: number, y1: number): number {
+  const raw = ((y - y0) / (y1 - y0)) * (EDGE_SAMPLES - 1)
+  return Math.max(0, Math.min(EDGE_SAMPLES - 1, Math.round(raw)))
+}
+
 export default function TreePanel({ getState, onStrike, onRotate }: TreePanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>(0)
@@ -226,68 +232,43 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     ctx.stroke()
     ctx.setLineDash([])
 
-    // "Tell": garis putih halus pada sisi rapuh (kiri/kanan) bila sedang menghadap.
+    // Retak/sobek di pinggir kayu (bekas tebasan kapak) — hanya bila sisi
+    // rapuh sedang menghadap. Digambar menjorok ke dalam dari tepi batang.
     if (s.rotation === s.fragileSide && s.phase === 'playing') {
-      const tellX = s.fragileHalf === 0 ? x0 + trunkW * 0.25 : x0 + trunkW * 0.75
-      ctx.strokeStyle = 'rgba(255,255,255,0.4)'
-      ctx.lineWidth = 3
-      ctx.beginPath()
-      ctx.moveTo(tellX, y0 + 40)
-      ctx.lineTo(tellX, y1 - 40)
-      ctx.stroke()
-    }
-
-    // Tebasan kapak: lekukan dari tepi batang (kiri/kanan bergantian),
-    // menonjol ke dalam sebagai sisa tebasan kapak.
-    const chopCount = Math.max(1, s.hits)
-    for (let i = 0; i < s.hits; i++) {
-      // Sebar tebasan merata di pita tengah batang (hindari ujung atas/bawah).
-      const t = (i + 1) / (chopCount + 1)
-      const chopY = y0 + (y1 - y0) * (0.2 + t * 0.6)
-      const chopDepth = EDGE_NOTCH_PX + i * 3 // makin dalam tiap pukulan
-      const chopHalf = 10 + i * 2 // tinggi mulut tebasan
-      const chopSide = i % 2 === 0 ? 'left' : 'right'
-
-      const idx = Math.max(
-        0,
-        Math.min(EDGE_SAMPLES - 1, Math.round(((chopY - y0) / (y1 - y0)) * (EDGE_SAMPLES - 1)))
-      )
-
-      if (chopSide === 'left') {
-        const ox = x0 + edge.left[idx]
-        ctx.fillStyle = '#2b1d0e'
-        ctx.beginPath()
-        ctx.moveTo(ox, chopY - chopHalf)
-        ctx.quadraticCurveTo(ox - chopDepth, chopY, ox, chopY + chopHalf)
-        ctx.closePath()
+      const tearSide = s.fragileHalf === 0 ? 'left' : 'right'
+      // Tepi acuan batang pada sisi sobek.
+      const drawTear = (yc: number, h: number, depth: number) => {
+        if (tearSide === 'left') {
+          const ox = x0 + edge.left[edgeIndex(yc, y0, y1)]
+          ctx.beginPath()
+          ctx.moveTo(ox, yc - h)
+          ctx.quadraticCurveTo(ox + depth * 1.6, yc, ox, yc + h)
+          ctx.quadraticCurveTo(ox + depth * 0.6, yc, ox, yc - h)
+          ctx.closePath()
+        } else {
+          const ox = x1 - edge.right[edgeIndex(yc, y0, y1)]
+          ctx.beginPath()
+          ctx.moveTo(ox, yc - h)
+          ctx.quadraticCurveTo(ox - depth * 1.6, yc, ox, yc + h)
+          ctx.quadraticCurveTo(ox - depth * 0.6, yc, ox, yc - h)
+          ctx.closePath()
+        }
+        // Isi gelap (rongga sobek) + tepi kayu baru terang.
+        ctx.fillStyle = 'rgba(26,17,8,0.85)'
         ctx.fill()
-        ctx.strokeStyle = '#1a1108'
-        ctx.lineWidth = 2
-        ctx.stroke()
-        // Kilau sisi dalam tebasan (kayu baru).
-        ctx.strokeStyle = 'rgba(230,200,150,0.35)'
+        ctx.strokeStyle = 'rgba(230,200,150,0.45)'
         ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.moveTo(ox, chopY - chopHalf + 2)
-        ctx.quadraticCurveTo(ox - chopDepth + 2, chopY, ox, chopY + chopHalf - 2)
         ctx.stroke()
-      } else {
-        const ox = x1 - edge.right[idx]
-        ctx.fillStyle = '#2b1d0e'
-        ctx.beginPath()
-        ctx.moveTo(ox, chopY - chopHalf)
-        ctx.quadraticCurveTo(ox + chopDepth, chopY, ox, chopY + chopHalf)
-        ctx.closePath()
-        ctx.fill()
-        ctx.strokeStyle = '#1a1108'
-        ctx.lineWidth = 2
-        ctx.stroke()
-        ctx.strokeStyle = 'rgba(230,200,150,0.35)'
-        ctx.lineWidth = 1.5
-        ctx.beginPath()
-        ctx.moveTo(ox, chopY - chopHalf + 2)
-        ctx.quadraticCurveTo(ox + chopDepth - 2, chopY, ox, chopY + chopHalf - 2)
-        ctx.stroke()
+      }
+
+      // Sobek utama di tengah sebagai penanda sisi rapuh.
+      drawTear((y0 + y1) / 2, 46, 10 + s.hits * 3)
+
+      // Tambahan sobek mengikuti jumlah pukulan benar.
+      for (let i = 0; i < s.hits; i++) {
+        const t = (i + 1) / (s.hits + 1)
+        const yc = y0 + (y1 - y0) * (0.15 + t * 0.7)
+        drawTear(yc, 22 + i * 3, 8 + i * 3)
       }
     }
 
@@ -317,14 +298,14 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
         aria-label="Batang pohon. Klik kiri atau kanan untuk memukul."
       />
       {/* Tombol putar di bawah layar */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-6 flex items-center justify-between px-6">
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 flex items-center justify-between px-6">
         <button
           type="button"
           onPointerDown={(e) => {
             e.stopPropagation()
             onRotate('left')
           }}
-          className="pointer-events-auto z-20 flex h-14 w-14 items-center justify-center rounded-full border-4 border-ink bg-sun text-2xl font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
+          className="pointer-events-auto z-20 flex h-12 w-12 items-center justify-center rounded-full border-4 border-ink bg-sun text-xl font-extrabold text-ink shadow-[0_3px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
           aria-label="Putar ke kiri"
         >
           ◀
@@ -335,7 +316,7 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
             e.stopPropagation()
             onRotate('right')
           }}
-          className="pointer-events-auto z-20 flex h-14 w-14 items-center justify-center rounded-full border-4 border-ink bg-sun text-2xl font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
+          className="pointer-events-auto z-20 flex h-12 w-12 items-center justify-center rounded-full border-4 border-ink bg-sun text-xl font-extrabold text-ink shadow-[0_3px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
           aria-label="Putar ke kanan"
         >
           ▶

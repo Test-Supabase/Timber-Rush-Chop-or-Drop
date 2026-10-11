@@ -1,7 +1,8 @@
 'use client'
 
-// TopBar: leaderboard real-time 3 pemain teratas saat bermain.
-// Format: nama | skor | timer (warna merah bila < 3 detik).
+// TopBar: leaderboard ringkas berupa kotak nama pemain yang naik/turun
+// otomatis mengikuti poin (disusun ulang + animasi transisi posisi).
+import { useMemo } from 'react'
 import { TIMER_LOW_THRESHOLD } from '@/lib/constants'
 
 interface Player {
@@ -15,112 +16,86 @@ interface Player {
 interface TopBarProps {
   players: Player[]
   myId: string
-  vertical?: boolean // layout baru: sidebar kanan (vertical list)
+  vertical?: boolean // dipertahankan untuk kompatibilitas
 }
 
-export default function TopBar({ players, myId, vertical }: TopBarProps) {
-  // Sort by alive first, score desc, timeLeft desc. Ambil 3 teratas.
-  const top3 = [...players]
-    .sort((a, b) => {
+// Tinggi tiap kotak pemain (px) + jarak antar kotak.
+const ROW_HEIGHT = 34
+const ROW_GAP = 6
+
+export default function TopBar({ players, myId }: TopBarProps) {
+  // Urutkan: hidup dulu, lalu skor tertinggi, lalu sisa waktu terbanyak.
+  const sorted = useMemo(() => {
+    return [...players].sort((a, b) => {
       if (a.alive !== b.alive) return a.alive ? -1 : 1
       if (a.score !== b.score) return b.score - a.score
       return b.timeLeft - a.timeLeft
     })
-    .slice(0, 3)
+  }, [players])
 
-  if (top3.length === 0) return null
+  if (sorted.length === 0) return null
 
-  // Icon mahkota untuk pemain #1.
-  const leader = top3[0]
-
-  // Layout horizontal (default): header + 3 pemain teratas (desktop)
-  if (!vertical) {
-    return (
-      <div className="w-full mb-4 rounded-xl border-4 border-ink bg-white/95 p-3 shadow-lg">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-lg font-extrabold text-bark-dark">
-            <span className="text-2xl">👑</span>
-            <span>{leader.name}</span>
-          </div>
-          <div className="flex gap-6">
-            {top3.map((player, index) => {
-              const isMe = player.id === myId
-              const lowTime = player.timeLeft < TIMER_LOW_THRESHOLD
-              return (
-                <div
-                  key={player.id}
-                  className={`flex flex-col items-center gap-1 ${
-                    isMe ? 'font-extrabold' : 'font-bold'
-                  } ${
-                    !player.alive
-                      ? 'text-ink/40 line-through'
-                      : lowTime
-                        ? 'text-danger animate-pulse'
-                        : 'text-ink'
-                  }`}
-                >
-                  <span className="text-sm">
-                    {index + 1}. {player.name}{isMe ? ' (Anda)' : ''}
-                  </span>
-                  <span className="text-xs">
-                    {player.score} • {player.timeLeft.toFixed(1)}s
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Layout vertical (sidebar): semua pemain dengan urutan rank (mobile/desktop)
-  const sortedPlayers = [...players]
-    .sort((a, b) => {
-      if (a.alive !== b.alive) return a.alive ? -1 : 1
-      if (a.score !== b.score) return b.score - a.score
-      return b.timeLeft - a.timeLeft
-    })
+  const totalHeight = sorted.length * ROW_HEIGHT + (sorted.length - 1) * ROW_GAP
 
   return (
-    <div className="h-full flex flex-col gap-2">
-      <div className="text-center text-lg font-extrabold text-bark-dark mb-3">
-        <span className="text-2xl">🏆</span> Leaderboard
+    <div className="w-full">
+      <div className="mb-2 text-center text-xs font-extrabold uppercase tracking-wider text-bark-dark">
+        🏆 Papan Skor
       </div>
-      {sortedPlayers.map((player, index) => {
-        const isMe = player.id === myId
-        const lowTime = player.timeLeft < TIMER_LOW_THRESHOLD
-        const leaderIcon = index === 0 ? '👑' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`
-        return (
-          <div
-            key={player.id}
-            className={`flex items-center gap-3 rounded-xl p-3 border-2 ${
-              isMe
-                ? 'border-ink bg-leaf/10 font-extrabold'
-                : 'border-ink/30 bg-white'
-            } ${
-              !player.alive
-                ? 'text-ink/40 line-through'
-                : lowTime
-                  ? 'text-danger animate-pulse'
-                  : 'text-ink'
-            }`}
-          >
-            <div className="flex-shrink-0 text-xl font-bold w-8 text-center">
-              {leaderIcon}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-bold">
-                {player.name}{isMe ? ' (Anda)' : ''}
-                {!player.alive && <span className="text-ink/60 ml-2">Eliminasi</span>}
+
+      {/* Kontainer relatif: tiap kotak diposisikan absolut agar transisi mulus. */}
+      <div className="relative w-full" style={{ height: `${totalHeight}px` }}>
+        {sorted.map((player, index) => {
+          const isMe = player.id === myId
+          const lowTime = player.timeLeft < TIMER_LOW_THRESHOLD
+          const medal =
+            index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}`
+
+          return (
+            <div
+              key={player.id}
+              className="absolute inset-x-0"
+              style={{
+                top: `${index * (ROW_HEIGHT + ROW_GAP)}px`,
+                height: `${ROW_HEIGHT}px`,
+                // Animasi naik/turun saat peringkat berubah.
+                transition: 'top 350ms cubic-bezier(0.22, 1, 0.36, 1)',
+              }}
+            >
+              <div
+                className={`flex h-full w-full items-center gap-1.5 rounded-lg border-2 px-2 ${
+                  isMe
+                    ? 'border-leaf bg-leaf/15'
+                    : !player.alive
+                      ? 'border-ink/20 bg-white/70'
+                      : 'border-ink/25 bg-white'
+                } ${
+                  !player.alive
+                    ? 'text-ink/40'
+                    : lowTime
+                      ? 'text-danger animate-pulse'
+                      : 'text-ink'
+                }`}
+              >
+                <span className="w-5 flex-shrink-0 text-center text-sm">{medal}</span>
+                <div className="min-w-0 flex-1">
+                  <div
+                    className={`truncate text-xs ${
+                      isMe ? 'font-extrabold' : 'font-bold'
+                    } ${!player.alive ? 'line-through' : ''}`}
+                  >
+                    {player.name}
+                    {isMe && ' (Anda)'}
+                  </div>
+                  <div className="text-[10px] font-bold text-ink/55">
+                    {player.score} poin
+                  </div>
+                </div>
               </div>
-              <div className="text-xs text-ink/60">
-                Skor: {player.score} • {player.timeLeft.toFixed(1)}s
-              </div>
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }

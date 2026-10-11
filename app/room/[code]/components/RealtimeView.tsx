@@ -333,58 +333,58 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
   }
 
   // ---- Layar bermain ----
-  // Layout: Kiri = batang pohon vertikal (tinggi penuh), Kanan = sidebar (leaderboard).
+  // Layout: Kiri = batang pohon (tinggi penuh, lebar tetap), Kanan = sidebar.
   return (
     <div className="flex min-h-screen p-4">
-      {/* BATANG POHON (KIRI) — tinggi layar penuh */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 min-w-0">
+      {/* BATANG POHON (KIRI) — tinggi penuh, lebar tetap (max-w-md) */}
+      <div className="flex flex-1 min-w-0 items-stretch justify-center">
+        <div className="relative h-full w-full max-w-md">
+          <TreePanel getState={treeState} onStrike={handleStrike} onRotate={handleRotate} />
+
+          {/* Feedback DEFLEKSI! — overlay di tengah */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            {feedback && (
+              <span className="animate-pulse text-3xl font-extrabold text-danger drop-shadow-[0_2px_0_#fff]">
+                {feedback}
+              </span>
+            )}
+          </div>
+
+          {/* Overlay eliminasi */}
+          {!amIAlive && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/40">
+              <div className="text-3xl font-extrabold text-white">TERELIMINASI!</div>
+              <div className="mt-2 text-lg font-bold text-white">
+                Menonton {rows.filter((r) => r.alive).length} pemain tersisa…
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* SIDEBAR LEADERBOARD + TIMER (KANAN) */}
+      <div className="ml-4 flex w-40 flex-shrink-0 flex-col items-center gap-4">
+        <TopBar players={rows} myId={myId} />
+        <TimerBar timeLeft={me?.timeLeft ?? 0} maxTime={me?.maxTime ?? 30} />
         {me && (
-          <div className="text-center text-sm font-bold text-ink">
+          <div className="text-center text-xs font-bold text-ink/70">
             Pohon #{me.treeIndex} • Skor {me.score}
           </div>
         )}
 
-        <TimerBar timeLeft={me?.timeLeft ?? 0} maxTime={me?.maxTime ?? 30} />
-
-        <div className="relative min-h-[420px] w-full flex-1">
-          <TreePanel getState={treeState} onStrike={handleStrike} onRotate={handleRotate} />
-        </div>
-
         {/* Petunjuk kontrol keyboard (khusus Windows) */}
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs font-bold text-ink/60">
+        <div className="mt-auto flex flex-col items-center gap-1 text-[10px] font-bold text-ink/55">
           <span>
-            <kbd className="rounded border-2 border-ink/40 bg-white px-1.5 py-0.5 text-ink">A</kbd>{' '}
-            <kbd className="rounded border-2 border-ink/40 bg-white px-1.5 py-0.5 text-ink">D</kbd>{' '}
+            <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">A</kbd>{' '}
+            <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">D</kbd>{' '}
             Geser
           </span>
           <span>
-            <kbd className="rounded border-2 border-ink/40 bg-white px-1.5 py-0.5 text-ink">J</kbd>{' '}
-            <kbd className="rounded border-2 border-ink/40 bg-white px-1.5 py-0.5 text-ink">L</kbd>{' '}
+            <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">J</kbd>{' '}
+            <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">L</kbd>{' '}
             Pukul
           </span>
         </div>
-
-        <div className="h-8">
-          {feedback && (
-            <span className="animate-pulse text-2xl font-extrabold text-danger">
-              {feedback}
-            </span>
-          )}
-        </div>
-
-        {!amIAlive && (
-          <div className="mt-2 text-center">
-            <div className="text-2xl font-extrabold text-danger">TERELIMINASI!</div>
-            <div className="text-sm font-bold text-ink/70">
-              Menonton {rows.filter((r) => r.alive).length} pemain tersisa…
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SIDEBAR LEADERBOARD (KANAN) */}
-      <div className="ml-4 w-64 flex-shrink-0 border-l-4 border-ink/20 pl-4">
-        <TopBar players={rows} myId={myId} vertical />
       </div>
     </div>
   )
