@@ -12,16 +12,18 @@ interface TimerBarProps {
 export default function TimerBar({ timeLeft, maxTime }: TimerBarProps) {
   const pct = maxTime > 0 ? Math.max(0, Math.min(100, (timeLeft / maxTime) * 100)) : 0
   const low = timeLeft < TIMER_LOW_THRESHOLD
+  // Persentase sisa waktu (lebih intuitif).
+  const percentText = Math.round(pct) + '%'
 
   return (
-    <div className="w-full max-w-md">
-      <div className="mb-1 flex justify-between text-sm font-bold text-ink">
-        <span>Nyawa: {timeLeft.toFixed(1)}s</span>
-        <span>MAX: {maxTime.toFixed(0)}s</span>
+    <div className="w-full max-w-2xl mb-6">
+      <div className="mb-2 flex justify-between text-base font-bold text-ink">
+        <span>Nyawa</span>
+        <span className="text-xl font-extrabold">{percentText}</span>
       </div>
-      <div className="h-7 w-full overflow-hidden rounded-full border-2 border-ink bg-ink/20">
+      <div className="h-8 w-full overflow-hidden rounded-xl border-4 border-ink bg-ink/20">
         <div
-          className={`h-full rounded-full transition-[width] duration-100 ${
+          className={`h-full rounded-xl transition-[width] duration-100 ${
             low ? 'bg-danger' : 'bg-leaf'
           }`}
           style={{ width: `${pct}%` }}

@@ -333,11 +333,11 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
   }
 
   // ---- Layar bermain ----
+  // Layout: Kiri = batang pohon vertikal (tinggi penuh), Kanan = sidebar (leaderboard).
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-4">
-      <TopBar players={rows} myId={myId} />
-
-      <div className="flex w-full max-w-4xl flex-col items-center justify-center gap-4">
+    <div className="flex min-h-screen p-4">
+      {/* BATANG POHON (KIRI) — tinggi layar penuh */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 min-w-0">
         {me && (
           <div className="text-center text-sm font-bold text-ink">
             Pohon #{me.treeIndex} • Skor {me.score}
@@ -346,7 +346,7 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
 
         <TimerBar timeLeft={me?.timeLeft ?? 0} maxTime={me?.maxTime ?? 30} />
 
-        <div className="relative">
+        <div className="relative min-h-[420px] w-full flex-1">
           <TreePanel getState={treeState} onStrike={handleStrike} onRotate={handleRotate} />
         </div>
 
@@ -380,6 +380,11 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
             </div>
           </div>
         )}
+      </div>
+
+      {/* SIDEBAR LEADERBOARD (KANAN) */}
+      <div className="ml-4 w-64 flex-shrink-0 border-l-4 border-ink/20 pl-4">
+        <TopBar players={rows} myId={myId} vertical />
       </div>
     </div>
   )

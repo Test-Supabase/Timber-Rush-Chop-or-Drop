@@ -143,7 +143,7 @@ export default function GameView() {
 
       <TimerBar timeLeft={view.timeLeft} maxTime={view.maxTime} />
 
-      <div className={shake ? 'animate-shake' : ''}>
+      <div className={`h-[420px] w-full max-w-md ${shake ? 'animate-shake' : ''}`}>
         <TreePanel getState={getState} onStrike={handleStrike} onRotate={handleRotate} />
       </div>
 

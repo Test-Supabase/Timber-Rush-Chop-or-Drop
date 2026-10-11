@@ -53,7 +53,7 @@ export default function MultiplayerView() {
         )}
 
         {/* TreePanel (untuk pemain yang dikontrol user) */}
-        <div className={shakeStyle}>
+        <div className={`h-[420px] w-full max-w-md ${shakeStyle}`}>
           <TreePanel
             getState={getMyState}
             onStrike={handleStrike}

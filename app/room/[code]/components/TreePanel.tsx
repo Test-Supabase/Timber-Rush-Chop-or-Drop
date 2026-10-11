@@ -1,9 +1,8 @@
 'use client'
 
-// TreePanel: render batang 4 sisi (tekstur bark), rotasi snap 90°,
-// animasi slide ~200ms saat berpindah sisi, indikator "Sisi x / N",
-// dan "tell" berupa retakan pada sisi rapuh (hanya bila sedang menghadap).
-// Klik area kiri/kanan kanvas = pukul kiri/kanan (zona tersembunyi).
+// TreePanel: render batang pohon vertikal (atas-bawah layar) dengan tekstur
+// bark yang random namun konsisten per sisi. Tebasan kapak ditampilkan sebagai
+// lekukan kecil dari samping batang.
 import { useEffect, useRef } from 'react'
 import {
   SIDES,
@@ -11,7 +10,6 @@ import {
 } from '@/lib/constants'
 
 interface TreePanelProps {
-  // getState dibaca langsung dari ref game (loop tidak re-render).
   getState: () => {
     rotation: number
     fragileSide: number
@@ -20,18 +18,56 @@ interface TreePanelProps {
     phase: 'playing' | 'transition' | 'over'
     transitionElapsed: number
   }
-  // onStrike dipanggil saat pemain mengklik area kiri/kanan.
   onStrike: (side: 'left' | 'right') => void
-  // onRotate dipanggil saat tombol ◀/▶ ditekan.
   onRotate: (dir: 'left' | 'right') => void
+}
+
+// Generator tekstur acak per sisi (seeded random agar konsisten per sisi).
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed) * 10000
+  return x - Math.floor(x)
+}
+
+// Jumlah titik sampel tepi batang (vertikal) per sisi.
+const EDGE_SAMPLES = 24
+// Lebar bergelombang tepi (px) dan lekukan maksimum kecil.
+const EDGE_WAVE_PX = 10
+const EDGE_NOTCH_PX = 6
+
+interface TrunkEdge {
+  left: number[] // jarak tepi kiri dari sisi kiri batang (px), per sampel
+  right: number[] // jarak tepi kanan dari sisi kanan batang (px), per sampel
+}
+
+const edgeCache = new Map<number, TrunkEdge>()
+
+// Bentuk tepi batang: acak tetapi deterministik per sisi (seed = indeks sisi),
+// sehingga setiap sisi punya siluet berbeda namun konsisten saat diputar.
+function getTrunkEdge(side: number, trunkW: number): TrunkEdge {
+  const cached = edgeCache.get(side)
+  if (cached) return cached
+  const left: number[] = []
+  const right: number[] = []
+  const phase = seededRandom(side * 17 + 3) * Math.PI * 2
+  for (let i = 0; i < EDGE_SAMPLES; i++) {
+    const t = i / (EDGE_SAMPLES - 1)
+    const wave = Math.sin(t * Math.PI * 3 + phase) * EDGE_WAVE_PX * 0.5
+    const noiseL = seededRandom(side * 100 + i * 3) * EDGE_NOTCH_PX
+    const noiseR = seededRandom(side * 100 + i * 3 + 1) * EDGE_NOTCH_PX
+    left.push(Math.max(0, EDGE_WAVE_PX + wave + noiseL))
+    right.push(Math.max(0, EDGE_WAVE_PX - wave + noiseR))
+  }
+  const edge = { left, right }
+  edgeCache.set(side, edge)
+  return edge
 }
 
 export default function TreePanel({ getState, onStrike, onRotate }: TreePanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>(0)
-  // Animasi slide horizontal saat berpindah sisi (0 = diam, 1 = baru selesai).
-  const slideRef = useRef({ from: 0, t: 1 })
   const prevRotationRef = useRef<number | null>(null)
+  // Simpan tekstur random per sisi (konsisten saat kembali ke sisi yang sama).
+  const barkPatternsRef = useRef<Map<number, { knots: Array<{ x: number; y: number; r: number }> }>>(new Map())
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -39,32 +75,55 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    // Batasi devicePixelRatio maks 2 (aturan besi: hindari render berat).
     const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2)
-    const cssW = canvas.clientWidth
-    const cssH = canvas.clientHeight
-    canvas.width = Math.round(cssW * dpr)
-    canvas.height = Math.round(cssH * dpr)
-    ctx.scale(dpr, dpr)
+
+    // Inisialisasi pola bark per sisi bila belum ada.
+    for (let side = 0; side < SIDES; side++) {
+      if (!barkPatternsRef.current.has(side)) {
+        const knots: Array<{ x: number; y: number; r: number }> = []
+        // Buat 4-6 mata kayu (knot) acak per sisi, posisi konsisten.
+        const count = 4 + Math.floor(seededRandom(side * 100) * 3)
+        for (let i = 0; i < count; i++) {
+          knots.push({
+            x: seededRandom(side * 100 + i * 10) * 0.8 + 0.1, // 10%-90%
+            y: seededRandom(side * 100 + i * 10 + 1) * 0.9 + 0.05, // 5%-95%
+            r: 8 + seededRandom(side * 100 + i * 10 + 2) * 12, // 8-20px
+          })
+        }
+        barkPatternsRef.current.set(side, { knots })
+      }
+    }
+
+    // Ukuran kanvas mengikuti elemen (responsif). Diperbarui tiap frame
+    // agar mendukung layout fleksibel (tinggi penuh layar).
+    let cssW = 0
+    let cssH = 0
+    const syncSize = () => {
+      const cw = canvas.clientWidth
+      const ch = canvas.clientHeight
+      if (cw !== cssW || ch !== cssH) {
+        cssW = cw
+        cssH = ch
+        canvas.width = Math.max(1, Math.round(cw * dpr))
+        canvas.height = Math.max(1, Math.round(ch * dpr))
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      }
+    }
 
     let last = performance.now()
 
     const render = (now: number) => {
-      const dt = Math.min((now - last) / 1000, 0.05) // batasi dt frame besar
+      const dt = Math.min((now - last) / 1000, 0.05)
       last = now
       const s = getState()
 
-      // Deteksi perubahan sisi untuk animasi slide.
       if (prevRotationRef.current === null) prevRotationRef.current = s.rotation
       if (prevRotationRef.current !== s.rotation) {
-        slideRef.current = { from: prevRotationRef.current, t: 0 }
         prevRotationRef.current = s.rotation
       }
-      if (slideRef.current.t < 1) {
-        slideRef.current.t = Math.min(1, slideRef.current.t + dt / 0.2) // ~200ms
-      }
 
-      drawBarkSide(ctx, cssW, cssH, s)
+      syncSize()
+      if (cssW > 0 && cssH > 0) drawTreeTrunk(ctx, cssW, cssH, s)
 
       rafRef.current = requestAnimationFrame(render)
     }
@@ -73,8 +132,7 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     return () => cancelAnimationFrame(rafRef.current)
   }, [getState])
 
-  // Gambar satu sisi batang (yang sedang menghadap pemain).
-  function drawBarkSide(
+  function drawTreeTrunk(
     ctx: CanvasRenderingContext2D,
     w: number,
     h: number,
@@ -82,110 +140,166 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
   ) {
     ctx.clearRect(0, 0, w, h)
 
-    // Offset slide halus saat berpindah sisi (dari kiri/kanan layar).
-    const easing = 1 - Math.pow(1 - slideRef.current.t, 3)
-    const dirSign = prevRotationRef.current === null ? 0 : 1
-    const slideOffset = (1 - easing) * 40 * dirSign
-
-    const padX = 24
-    const x0 = padX + slideOffset
-    const x1 = w - padX + slideOffset
-    const panelW = x1 - x0
-    const y0 = 20
-    const y1 = h - 20
-
-    // Fase transisi: fade-out pohon lama (opacity turun).
+    // Fase transisi: fade-out pohon lama.
     let alpha = 1
     if (s.phase === 'transition') {
       alpha = Math.max(0, 1 - s.transitionElapsed / (TREE_TRANSITION * 0.5))
     }
     ctx.globalAlpha = alpha
 
-    // Badan batang dengan tekstur bark.
+    // Batang pohon vertikal (lebar 60% layar, tinggi penuh).
+    const trunkW = w * 0.6
+    const x0 = (w - trunkW) / 2
+    const x1 = x0 + trunkW
+    const y0 = 0
+    const y1 = h
+
+    // Bentuk tepi batang: acak tetapi konsisten per sisi (seed = indeks sisi).
+    const edge = getTrunkEdge(s.rotation, trunkW)
+
+    // Gradien horizontal untuk kedalaman 3D (warna tetap sama di semua sisi).
     const grad = ctx.createLinearGradient(x0, 0, x1, 0)
-    grad.addColorStop(0, '#5c3a1a')
+    grad.addColorStop(0, '#4a3018')
+    grad.addColorStop(0.3, '#6b4423')
     grad.addColorStop(0.5, '#8b5a2b')
-    grad.addColorStop(1, '#5c3a1a')
+    grad.addColorStop(0.7, '#6b4423')
+    grad.addColorStop(1, '#4a3018')
+
+    const drawTrunkPath = () => {
+      ctx.beginPath()
+      ctx.moveTo(x0 + edge.left[0], y0)
+      for (let i = 1; i < edge.left.length; i++) {
+        ctx.lineTo(x0 + edge.left[i], y0 + ((y1 - y0) * i) / (edge.left.length - 1))
+      }
+      for (let i = edge.right.length - 1; i >= 0; i--) {
+        ctx.lineTo(x1 - edge.right[i], y0 + ((y1 - y0) * i) / (edge.right.length - 1))
+      }
+      ctx.closePath()
+    }
+
+    drawTrunkPath()
     ctx.fillStyle = grad
-    roundRect(ctx, x0, y0, panelW, y1 - y0, 18)
     ctx.fill()
-    ctx.lineWidth = 4
+
+    // Outline batang.
+    drawTrunkPath()
     ctx.strokeStyle = '#2b1d0e'
+    ctx.lineWidth = 4
     ctx.stroke()
 
-    // Serat kayu vertikal.
-    ctx.strokeStyle = 'rgba(0,0,0,0.10)'
-    ctx.lineWidth = 2
-    for (let x = x0 + 10; x < x1; x += 14) {
+    // Serat kayu vertikal (beberapa garis tipis).
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)'
+    ctx.lineWidth = 1
+    for (let i = 0; i < 8; i++) {
+      const xLine = x0 + (i + 1) * (trunkW / 9)
       ctx.beginPath()
-      ctx.moveTo(x, y0 + 6)
-      ctx.lineTo(x, y1 - 6)
+      ctx.moveTo(xLine, y0)
+      ctx.lineTo(xLine, y1)
       ctx.stroke()
     }
 
-    // Garis tengah tak terlihat (zona pukul) — hanya penanda halus.
-    ctx.strokeStyle = 'rgba(43,29,14,0.18)'
-    ctx.setLineDash([6, 8])
+    // Pola bark: mata kayu (knots) sesuai sisi rotasi saat ini.
+    const pattern = barkPatternsRef.current.get(s.rotation)
+    if (pattern) {
+      pattern.knots.forEach((knot) => {
+        const kx = x0 + knot.x * trunkW
+        const ky = y0 + knot.y * (y1 - y0)
+        const kr = knot.r
+        // Mata kayu: lingkaran gelap.
+        const knotGrad = ctx.createRadialGradient(kx, ky, 0, kx, ky, kr)
+        knotGrad.addColorStop(0, 'rgba(43,29,14,0.6)')
+        knotGrad.addColorStop(1, 'rgba(43,29,14,0.1)')
+        ctx.fillStyle = knotGrad
+        ctx.beginPath()
+        ctx.arc(kx, ky, kr, 0, Math.PI * 2)
+        ctx.fill()
+      })
+    }
+
+    // Garis tengah vertikal (zona pukul kiri/kanan) — halus.
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)'
+    ctx.setLineDash([8, 12])
     ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.moveTo((x0 + x1) / 2, y0)
-    ctx.lineTo((x0 + x1) / 2, y1)
+    ctx.moveTo(w / 2, y0)
+    ctx.lineTo(w / 2, y1)
     ctx.stroke()
     ctx.setLineDash([])
 
-    // "Tell": retakan pada sisi rapuh bila sedang menghadap.
+    // "Tell": garis putih halus pada sisi rapuh (kiri/kanan) bila sedang menghadap.
     if (s.rotation === s.fragileSide && s.phase === 'playing') {
-      const halfX =
-        s.fragileHalf === 0 ? x0 + panelW * 0.25 : x0 + panelW * 0.75
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+      const tellX = s.fragileHalf === 0 ? x0 + trunkW * 0.25 : x0 + trunkW * 0.75
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)'
       ctx.lineWidth = 3
       ctx.beginPath()
-      ctx.moveTo(halfX, y0 + 30)
-      ctx.lineTo(halfX, y1 - 30)
+      ctx.moveTo(tellX, y0 + 40)
+      ctx.lineTo(tellX, y1 - 40)
       ctx.stroke()
     }
 
-    // Retak tumbuh sesuai jumlah pukulan benar (semakin dalam/lebar).
+    // Tebasan kapak: lekukan dari tepi batang (kiri/kanan bergantian),
+    // menonjol ke dalam sebagai sisa tebasan kapak.
+    const chopCount = Math.max(1, s.hits)
     for (let i = 0; i < s.hits; i++) {
-      const cx = x0 + panelW / 2
-      const depth = 22 + i * 14
-      ctx.strokeStyle = '#2b1d0e'
-      ctx.lineWidth = 3 + i
-      ctx.beginPath()
-      ctx.moveTo(cx - depth, y0 + 60 + i * 40)
-      ctx.lineTo(cx, y0 + 60 + i * 40)
-      ctx.lineTo(cx + depth, y0 + 80 + i * 40)
-      ctx.stroke()
+      // Sebar tebasan merata di pita tengah batang (hindari ujung atas/bawah).
+      const t = (i + 1) / (chopCount + 1)
+      const chopY = y0 + (y1 - y0) * (0.2 + t * 0.6)
+      const chopDepth = EDGE_NOTCH_PX + i * 3 // makin dalam tiap pukulan
+      const chopHalf = 10 + i * 2 // tinggi mulut tebasan
+      const chopSide = i % 2 === 0 ? 'left' : 'right'
+
+      const idx = Math.max(
+        0,
+        Math.min(EDGE_SAMPLES - 1, Math.round(((chopY - y0) / (y1 - y0)) * (EDGE_SAMPLES - 1)))
+      )
+
+      if (chopSide === 'left') {
+        const ox = x0 + edge.left[idx]
+        ctx.fillStyle = '#2b1d0e'
+        ctx.beginPath()
+        ctx.moveTo(ox, chopY - chopHalf)
+        ctx.quadraticCurveTo(ox - chopDepth, chopY, ox, chopY + chopHalf)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = '#1a1108'
+        ctx.lineWidth = 2
+        ctx.stroke()
+        // Kilau sisi dalam tebasan (kayu baru).
+        ctx.strokeStyle = 'rgba(230,200,150,0.35)'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.moveTo(ox, chopY - chopHalf + 2)
+        ctx.quadraticCurveTo(ox - chopDepth + 2, chopY, ox, chopY + chopHalf - 2)
+        ctx.stroke()
+      } else {
+        const ox = x1 - edge.right[idx]
+        ctx.fillStyle = '#2b1d0e'
+        ctx.beginPath()
+        ctx.moveTo(ox, chopY - chopHalf)
+        ctx.quadraticCurveTo(ox + chopDepth, chopY, ox, chopY + chopHalf)
+        ctx.closePath()
+        ctx.fill()
+        ctx.strokeStyle = '#1a1108'
+        ctx.lineWidth = 2
+        ctx.stroke()
+        ctx.strokeStyle = 'rgba(230,200,150,0.35)'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.moveTo(ox, chopY - chopHalf + 2)
+        ctx.quadraticCurveTo(ox + chopDepth - 2, chopY, ox, chopY + chopHalf - 2)
+        ctx.stroke()
+      }
     }
 
     ctx.globalAlpha = 1
 
-    // Indikator "Sisi x / N".
+    // Indikator sisi di bawah layar.
     ctx.fillStyle = '#2b1d0e'
-    ctx.font = 'bold 16px "Trebuchet MS", Verdana, sans-serif'
+    ctx.font = 'bold 14px "Trebuchet MS", sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText(`Sisi ${s.rotation + 1} / ${SIDES}`, w / 2, h - 6)
+    ctx.fillText(`Sisi ${s.rotation + 1} / ${SIDES}`, w / 2, h - 10)
   }
 
-  // Utilitas menggambar persegi dengan sudut membulat.
-  function roundRect(
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    r: number
-  ) {
-    ctx.beginPath()
-    ctx.moveTo(x + r, y)
-    ctx.arcTo(x + w, y, x + w, y + h, r)
-    ctx.arcTo(x + w, y + h, x, y + h, r)
-    ctx.arcTo(x, y + h, x, y, r)
-    ctx.arcTo(x, y, x + w, y, r)
-    ctx.closePath()
-  }
-
-  // Klik area kiri/kanan kanvas = pukul kiri/kanan.
   const handleCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -195,40 +309,37 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
   }
 
   return (
-    <div className="w-full max-w-md">
-      <div className="relative">
-        <canvas
-          ref={canvasRef}
-          onPointerDown={handleCanvasPointerDown}
-          className="game-area h-[420px] w-full cursor-pointer rounded-2xl"
-          aria-label="Area batang pohon. Klik kiri atau kanan untuk memukul."
-        />
-        {/* Tombol putar di lapisan atas (z-index tinggi) + stopPropagation
-            agar tidak dianggap pukulan. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-3 flex items-center justify-between px-3">
-          <button
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              onRotate('left')
-            }}
-            className="pointer-events-auto z-20 flex h-14 w-14 items-center justify-center rounded-full border-4 border-ink bg-sun text-2xl font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
-            aria-label="Putar ke kiri"
-          >
-            ◀
-          </button>
-          <button
-            type="button"
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              onRotate('right')
-            }}
-            className="pointer-events-auto z-20 flex h-14 w-14 items-center justify-center rounded-full border-4 border-ink bg-sun text-2xl font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
-            aria-label="Putar ke kanan"
-          >
-            ▶
-          </button>
-        </div>
+    <div className="relative h-full w-full">
+      <canvas
+        ref={canvasRef}
+        onPointerDown={handleCanvasPointerDown}
+        className="game-area h-full w-full cursor-pointer"
+        aria-label="Batang pohon. Klik kiri atau kanan untuk memukul."
+      />
+      {/* Tombol putar di bawah layar */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-6 flex items-center justify-between px-6">
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            onRotate('left')
+          }}
+          className="pointer-events-auto z-20 flex h-14 w-14 items-center justify-center rounded-full border-4 border-ink bg-sun text-2xl font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
+          aria-label="Putar ke kiri"
+        >
+          ◀
+        </button>
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            onRotate('right')
+          }}
+          className="pointer-events-auto z-20 flex h-14 w-14 items-center justify-center rounded-full border-4 border-ink bg-sun text-2xl font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
+          aria-label="Putar ke kanan"
+        >
+          ▶
+        </button>
       </div>
     </div>
   )
