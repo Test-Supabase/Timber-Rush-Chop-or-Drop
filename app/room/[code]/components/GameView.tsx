@@ -83,6 +83,11 @@ export default function GameView() {
     const result: HitResult = strike(stateRef.current, side)
     if (result === 'ignored') return
     const s = stateRef.current
+    // Gergaji mesin: popup teks "PERFECT"/"GOOD" ditangani TreePanel (sawSeq).
+    if (result === 'chainsaw') {
+      lastCommitRef.current = 0
+      return
+    }
     // Popup di area batang: bintang "+poin" bila benar, kotak "MISS" bila salah.
     setHitEvent({
       seq: s.hitSeq,
@@ -148,6 +153,16 @@ export default function GameView() {
       lastGain: s.lastGain,
       lastSide: s.lastSide,
       swingCooldown: s.swingCooldown,
+      swingCooldownMax: s.swingCooldownMax,
+      // Gergaji mesin
+      chainsawActive: s.chainsawActive,
+      chainsawTimeLeft: s.chainsawTimeLeft,
+      chainsawFlashSeq: s.chainsawFlashSeq,
+      treesFelled: s.treesFelled,
+      chainsawCharge: s.chainsawCharge,
+      sawText: s.sawText,
+      sawGain: s.sawGain,
+      sawSeq: s.sawSeq,
     }
   }, [])
 

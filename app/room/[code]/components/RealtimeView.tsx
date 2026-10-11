@@ -101,6 +101,15 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
       lastGain: s?.lastGain ?? 0,
       lastSide: s?.lastSide ?? 'left',
       swingCooldown: s?.swingCooldown ?? 0,
+      // Gergaji mesin
+      chainsawActive: s?.chainsawActive ?? false,
+      chainsawTimeLeft: s?.chainsawTimeLeft ?? 0,
+      chainsawFlashSeq: s?.chainsawFlashSeq ?? 0,
+      treesFelled: s?.treesFelled ?? 0,
+      chainsawCharge: s?.chainsawCharge ?? 0,
+      sawText: s?.sawText ?? 'none',
+      sawGain: s?.sawGain ?? 0,
+      sawSeq: s?.sawSeq ?? 0,
     }
   }, [getMyState, getPlayerState, isSpectating, watchingId])
 

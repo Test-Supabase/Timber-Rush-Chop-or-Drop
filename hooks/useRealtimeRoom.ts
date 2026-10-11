@@ -72,6 +72,14 @@ export interface PlayerNet {
   lastHit: 'correct' | 'wrong' | 'none'
   lastGain: number
   lastSide: HitSide
+  chainsawActive?: boolean
+  chainsawTimeLeft?: number
+  chainsawFlashSeq?: number
+  treesFelled?: number
+  chainsawCharge?: number
+  sawText?: 'perfect' | 'good' | 'none'
+  sawGain?: number
+  sawSeq?: number
 }
 
 /** Snapshot ruangan (dikirim host -> klien). */
@@ -151,6 +159,14 @@ function toNet(p: PlayerState, id: string, name: string, ready: boolean, isBot: 
     lastHit: p.lastHit,
     lastGain: p.lastGain,
     lastSide: p.lastSide,
+    chainsawActive: p.chainsawActive,
+    chainsawTimeLeft: p.chainsawTimeLeft,
+    chainsawFlashSeq: p.chainsawFlashSeq,
+    treesFelled: p.treesFelled,
+    chainsawCharge: p.chainsawCharge,
+    sawText: p.sawText,
+    sawGain: p.sawGain,
+    sawSeq: p.sawSeq,
   }
 }
 

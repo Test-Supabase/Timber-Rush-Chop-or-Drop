@@ -56,6 +56,22 @@ export const HIT_POPUP_RIGHT_PCT = 72; // % lebar: posisi popup untuk pukulan si
 export const HIT_POPUP_TOP_MIN_PCT = 30; // % tinggi: batas atas area popup
 export const HIT_POPUP_TOP_RANGE_PCT = 40; // % tinggi: rentang vertikal area popup
 
+// --- Gergaji mesin (power-up berkala) ---
+export const CHAINSAW_EVERY = 5; // pohon roboh (dengan kapak) untuk mengaktifkan gergaji
+export const CHAINSAW_DURATION = 10; // detik: lama gergaji mesin aktif
+export const CHAINSAW_COOLDOWN = 0.5; // detik: cooldown ayunan gergaji mesin
+export const CHAINSAW_HIT_DELAY = 0.5; // detik: delay proses penebangan bila BENAR
+export const CHAINSAW_MISS_DELAY = 1.0; // detik: delay proses penebangan bila SALAH
+export const CHAINSAW_TRANSITION = 0.5; // detik: transisi antar pohon saat gergaji aktif
+
+// --- Gauge lingkaran gergaji (kanan tengah area pohon) ---
+export const CHAINSAW_GAUGE_SIZE_PX = 88; // px: diameter gauge lingkaran
+export const CHAINSAW_GAUGE_STROKE_PX = 9; // px: tebal cincin gauge
+export const CHAINSAW_GAUGE_RIGHT_PX = 6; // px: jarak gauge dari tepi kanan area pohon
+export const CHAINSAW_GAUGE_ICON_PX = 36; // px: ukuran ikon gergaji di tengah gauge
+export const CHAINSAW_POPUP_MS = 1100; // ms: durasi teks "PERFECT"/"GOOD"
+export const CHAINSAW_FLASH_MS = 900; // ms: durasi animasi "mencolok" saat gergaji aktif
+
 // --- Bar cooldown kapak (bawah area batang) ---
 export const COOLDOWN_BAR_WIDTH_PX = 208; // px: lebar bar cooldown
 export const COOLDOWN_BAR_HEIGHT_PX = 16; // px: tinggi bar cooldown

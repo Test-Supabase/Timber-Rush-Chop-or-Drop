@@ -45,6 +45,15 @@ export interface TreeViewState {
   lastGain?: number
   lastSide?: 'left' | 'right'
   swingCooldown: number
+  // Gergaji mesin
+  chainsawActive?: boolean
+  chainsawTimeLeft?: number
+  chainsawFlashSeq?: number
+  treesFelled?: number
+  chainsawCharge?: number
+  sawText?: 'perfect' | 'good' | 'none'
+  sawGain?: number
+  sawSeq?: number
 }
 
 const VIEW_COMMIT_INTERVAL = 100 // ms
@@ -134,6 +143,15 @@ export function useMultiplayer(playerName: string) {
       lastGain: s.state.lastGain,
       lastSide: s.state.lastSide,
       swingCooldown: s.state.swingCooldown,
+      // Gergaji mesin
+      chainsawActive: s.state.chainsawActive,
+      chainsawTimeLeft: s.state.chainsawTimeLeft,
+      chainsawFlashSeq: s.state.chainsawFlashSeq,
+      treesFelled: s.state.treesFelled,
+      chainsawCharge: s.state.chainsawCharge,
+      sawText: s.state.sawText,
+      sawGain: s.state.sawGain,
+      sawSeq: s.state.sawSeq,
     }
   }, [])
 
@@ -141,6 +159,12 @@ export function useMultiplayer(playerName: string) {
   const handleStrike = useCallback((side: HitSide) => {
     const result: HitResult = strikePlayer(stateRef.current, stateRef.current.myId, side) ?? 'ignored'
     if (result === 'ignored') return
+
+    // Gergaji mesin: popup teks "PERFECT"/"GOOD" ditangani TreePanel (sawSeq).
+    if (result === 'chainsaw') {
+      lastCommitRef.current = 0
+      return
+    }
 
     // Popup di area batang untuk pemain kita.
     const me = stateRef.current.players.find((p) => p.id === stateRef.current.myId)

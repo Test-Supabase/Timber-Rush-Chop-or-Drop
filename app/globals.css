@@ -25,6 +25,55 @@
   --animate-shake: shake 0.3s ease-in-out;
   /* Popup pukulan: muncul membesar, lalu memudar & naik. */
   --animate-hit-pop: hitPop 900ms ease-out forwards;
+  /* Kilat "mencolak" saat gergaji mesin baru aktif. */
+  --animate-chainsaw-flash: chainsawFlash 900ms ease-out forwards;
+  /* Popup teks gergaji "PERFECT"/"GOOD". */
+  --animate-saw-pop: sawPop 1100ms ease-out forwards;
+}
+
+@keyframes chainsawFlash {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1.01);
+  }
+  30% {
+    opacity: 0.25;
+  }
+  45% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.25;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+@keyframes sawPop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.5) rotate(-6deg);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.2) rotate(3deg);
+  }
+  40% {
+    transform: translate(-50%, 0) scale(1) rotate(-2deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -60px) scale(1) rotate(0deg);
+  }
 }
 
 @keyframes hitPop {

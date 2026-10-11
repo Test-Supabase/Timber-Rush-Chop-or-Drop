@@ -3,7 +3,11 @@
 // TreePanel: render batang pohon vertikal (atas-bawah layar) dengan tekstur
 // bark yang random namun konsisten per sisi. Tebasan kapak ditampilkan sebagai
 // lekukan kecil dari samping batang.
-import { useEffect, useRef } from 'react'
+//
+// Tambahan: gauge lingkaran gergaji mesin di kanan-tengah area batang.
+//  - Saat belum aktif: cincin biru menunjukkan progres pengisian (0..CHAINSAW_EVERY pohon).
+//  - Saat aktif: cincin merah menunjukkan sisa waktu gergaji + kilat "mencolok".
+import { useEffect, useRef, useState } from 'react'
 import {
   SIDES,
   TREE_TRANSITION,
@@ -13,7 +17,16 @@ import {
   COOLDOWN_BAR_BOTTOM_PX,
   COOLDOWN_ICON_SIZE_PX,
   CONTROL_BUTTON_BOTTOM_PX,
+  // Gergaji mesin
+  CHAINSAW_EVERY,
+  CHAINSAW_FLASH_MS,
+  CHAINSAW_GAUGE_SIZE_PX,
+  CHAINSAW_GAUGE_STROKE_PX,
+  CHAINSAW_GAUGE_RIGHT_PX,
+  CHAINSAW_GAUGE_ICON_PX,
+  CHAINSAW_POPUP_MS,
 } from '@/lib/constants'
+import { chainsawGauge } from '@/lib/gameState'
 
 interface TreePanelProps {
   getState: () => {
@@ -28,6 +41,15 @@ interface TreePanelProps {
     lastGain?: number
     lastSide?: 'left' | 'right'
     swingCooldown: number
+    // Gergaji mesin
+    chainsawActive?: boolean
+    chainsawTimeLeft?: number
+    chainsawFlashSeq?: number
+    treesFelled?: number
+    chainsawCharge?: number
+    sawText?: 'perfect' | 'good' | 'none'
+    sawGain?: number
+    sawSeq?: number
   }
   onStrike: (side: 'left' | 'right') => void
   onRotate: (dir: 'left' | 'right') => void
@@ -88,6 +110,33 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
   const cooldownWrapRef = useRef<HTMLDivElement>(null)
   // Simpan tekstur random per sisi (konsisten saat kembali ke sisi yang sama).
   const barkPatternsRef = useRef<Map<number, { knots: Array<{ x: number; y: number; r: number }> }>>(new Map())
+  // Gauge lingkaran gergaji: cincin progres (strokeDashoffset diatur via rAF).
+  const gaugeRef = useRef<SVGCircleElement | null>(null)
+  // Status gergaji aktif untuk JSX (diubah hanya saat berubah -> hemat re-render).
+  const [chainsawOn, setChainsawOn] = useState(false)
+  const chainsawOnRef = useRef(false)
+  // Teks tengah gauge (mis. "3/5" saat mengisi, atau sisa detik saat aktif).
+  const [gaugeText, setGaugeText] = useState(`0/${CHAINSAW_EVERY}`)
+  const gaugeTextRef = useRef(`0/${CHAINSAW_EVERY}`)
+  // Label sisi untuk JSX (diubah hanya saat berubah).
+  const [sideLabel, setSideLabel] = useState(1)
+  const sideLabelRef = useRef(1)
+  // Nomor urut tebasan gergaji terakhir yang sudah ditampilkan (deteksi perubahan).
+  const lastSawSeqRef = useRef(0)
+  // Nomor urut aktivasi gergaji terakhir (untuk animasi "mencolok").
+  const lastFlashSeqRef = useRef(0)
+  // Aktifkan animasi kilat "mencolok" saat gergaji baru aktif.
+  const [flash, setFlash] = useState(false)
+  // Popup teks "PERFECT"/"GOOD" dari gergaji.
+  const [popupEvent, setPopupEvent] = useState<{
+    seq: number
+    text: 'perfect' | 'good'
+    gain: number
+  } | null>(null)
+
+  // Panjang keliling cincin gauge (dipakai untuk dasharray/dashoffset).
+  const gaugeRadius = (CHAINSAW_GAUGE_SIZE_PX - CHAINSAW_GAUGE_STROKE_PX) / 2
+  const gaugeCircumference = 2 * Math.PI * gaugeRadius
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -137,10 +186,30 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
       last = now
       const s = getState()
 
-      if (prevRotationRef.current === null) prevRotationRef.current = s.rotation
-      if (prevRotationRef.current !== s.rotation) {
-        prevRotationRef.current = s.rotation
+      // Toggle status gergaji hanya saat berubah (hemat re-render).
+      const csOn = s.chainsawActive ?? false
+      if (csOn !== chainsawOnRef.current) {
+        chainsawOnRef.current = csOn
+        setChainsawOn(csOn)
       }
+
+      // Teks tengah gauge: sisa detik saat aktif, progres pohon saat mengisi.
+      const gText = csOn
+        ? `${(s.chainsawTimeLeft ?? 0).toFixed(1)}s`
+        : `${s.chainsawCharge ?? 0}/${CHAINSAW_EVERY}`
+      if (gText !== gaugeTextRef.current) {
+        gaugeTextRef.current = gText
+        setGaugeText(gText)
+      }
+
+      // Label sisi: tetap rotation + 1 (sisi yang dilihat pemain sesuai rotasi).
+      const label = s.rotation + 1
+      if (label !== sideLabelRef.current) {
+        sideLabelRef.current = label
+        setSideLabel(label)
+      }
+
+      prevRotationRef.current = s.rotation
 
       syncSize()
       if (cssW > 0 && cssH > 0) drawTreeTrunk(ctx, cssW, cssH, s)
@@ -156,12 +225,44 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
         cooldownFillRef.current.style.width = `${(1 - ratio) * 100}%`
       }
 
+      // Cincin gauge gergaji: nilai 0..1 -> panjang dashoffset.
+      if (gaugeRef.current) {
+        const value = chainsawGauge(s)
+        gaugeRef.current.style.strokeDashoffset = `${gaugeCircumference * (1 - value)}px`
+      }
+
+      // Deteksi tebasan gergaji baru (sawSeq naik) -> tampilkan teks PERFECT/GOOD.
+      const sawSeq = s.sawSeq ?? 0
+      if (sawSeq !== lastSawSeqRef.current) {
+        lastSawSeqRef.current = sawSeq
+        if (s.sawText && s.sawText !== 'none') {
+          setPopupEvent({ seq: sawSeq, text: s.sawText, gain: s.sawGain ?? 0 })
+        }
+      }
+
+      // Deteksi gergaji baru aktif (chainsawFlashSeq naik) -> animasi "mencolok".
+      const flashSeq = s.chainsawFlashSeq ?? 0
+      if (flashSeq !== lastFlashSeqRef.current) {
+        lastFlashSeqRef.current = flashSeq
+        if (flashSeq > 0) {
+          setFlash(true)
+          window.setTimeout(() => setFlash(false), CHAINSAW_FLASH_MS)
+        }
+      }
+
       rafRef.current = requestAnimationFrame(render)
     }
 
     rafRef.current = requestAnimationFrame(render)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [getState])
+  }, [getState, gaugeCircumference])
+
+  // Popup teks "PERFECT"/"GOOD" dari gergaji.
+  useEffect(() => {
+    if (!popupEvent) return
+    const t = window.setTimeout(() => setPopupEvent(null), CHAINSAW_POPUP_MS)
+    return () => window.clearTimeout(t)
+  }, [popupEvent])
 
   function drawTreeTrunk(
     ctx: CanvasRenderingContext2D,
@@ -257,14 +358,18 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     ctx.stroke()
     ctx.setLineDash([])
 
-    // Retak horizontal (bekas tebasan kapak) di sisi rapuh.
-    // Satu retak yang bertambah LEBAR tiap pukulan benar, dengan rongga gelap.
-    if (s.rotation === s.fragileSide && s.phase === 'playing') {
-      const isLeftHalf = s.fragileHalf === 0
+    // Sisi rapuh efektif: saat gergaji aktif, retak selalu di sisi "1" (index 0).
+    const effectiveFragileSide = s.chainsawActive ? 0 : s.fragileSide
+    const effectiveFragileHalf = s.fragileHalf
+
+    // Retak horizontal (bekas tebasan) di sisi rapuh, bertambah LEBAR tiap pukulan
+    // benar, dengan rongga gelap. Tampil sejak hits = 0 (retak awal).
+    if (s.phase === 'playing' && s.rotation === effectiveFragileSide) {
+      const isLeftHalf = effectiveFragileHalf === 0
       const inward = isLeftHalf ? 1 : -1 // arah retak masuk ke dalam kayu
       const yc = (y0 + y1) / 2 // posisi vertikal retak (tengah batang)
       const idx = edgeIndex(yc, y0, y1)
-      // Titik buka retak di tepi batang (sisi rapuh).
+      // Titik buka retak di tepi batang (sisi rapuh efektif).
       const edgeX = isLeftHalf ? x0 + edge.left[idx] : x1 - edge.right[idx]
 
       const hits = Math.max(0, s.hits) // jumlah pukulan benar sebenarnya
@@ -276,18 +381,8 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
       ctx.fillStyle = '#140b03'
       ctx.beginPath()
       ctx.moveTo(edgeX, yc - halfH)
-      ctx.quadraticCurveTo(
-        edgeX + inward * length * 0.6,
-        yc - halfH * 0.3,
-        tipX,
-        yc
-      )
-      ctx.quadraticCurveTo(
-        edgeX + inward * length * 0.6,
-        yc + halfH * 0.3,
-        edgeX,
-        yc + halfH
-      )
+      ctx.quadraticCurveTo(edgeX + inward * length * 0.6, yc - halfH * 0.3, tipX, yc)
+      ctx.quadraticCurveTo(edgeX + inward * length * 0.6, yc + halfH * 0.3, edgeX, yc + halfH)
       ctx.closePath()
       ctx.fill()
 
@@ -296,21 +391,11 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
       ctx.lineWidth = 3.5
       ctx.beginPath()
       ctx.moveTo(edgeX, yc - halfH)
-      ctx.quadraticCurveTo(
-        edgeX + inward * length * 0.6,
-        yc - halfH * 0.3,
-        tipX,
-        yc
-      )
+      ctx.quadraticCurveTo(edgeX + inward * length * 0.6, yc - halfH * 0.3, tipX, yc)
       ctx.stroke()
       ctx.beginPath()
       ctx.moveTo(edgeX, yc + halfH)
-      ctx.quadraticCurveTo(
-        edgeX + inward * length * 0.6,
-        yc + halfH * 0.3,
-        tipX,
-        yc
-      )
+      ctx.quadraticCurveTo(edgeX + inward * length * 0.6, yc + halfH * 0.3, tipX, yc)
       ctx.stroke()
 
       // 3) Retakan rambut menjalar dari ujung (kayu mulai pecah).
@@ -341,6 +426,10 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
 
   return (
     <div className="relative h-full w-full">
+      {/* Animasi "mencolok": kilat merah menyala saat gergaji mesin baru aktif. */}
+      {flash && (
+        <div className="pointer-events-none absolute inset-0 z-40 animate-chainsaw-flash rounded-3xl bg-danger/30 ring-8 ring-inset ring-danger" />
+      )}
       <canvas
         ref={canvasRef}
         onPointerDown={handleCanvasPointerDown}
@@ -374,6 +463,80 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
         >
           ▶
         </button>
+      </div>
+
+      {/* Gauge lingkaran gergaji mesin — selalu tampil di kanan tengah area batang. */}
+      <div
+        className="pointer-events-none absolute top-1/2 z-10 -translate-y-1/2"
+        style={{ right: `${CHAINSAW_GAUGE_RIGHT_PX}px` }}
+      >
+        <div
+          className={`relative flex items-center justify-center rounded-full ${
+            chainsawOn ? 'animate-pulse ring-4 ring-danger/70' : ''
+          }`}
+          style={{ width: `${CHAINSAW_GAUGE_SIZE_PX}px`, height: `${CHAINSAW_GAUGE_SIZE_PX}px` }}
+        >
+          {/* Cincin dasar gauge. */}
+          <svg
+            className="absolute inset-0"
+            viewBox={`0 0 ${CHAINSAW_GAUGE_SIZE_PX} ${CHAINSAW_GAUGE_SIZE_PX}`}
+          >
+            <circle
+              cx={CHAINSAW_GAUGE_SIZE_PX / 2}
+              cy={CHAINSAW_GAUGE_SIZE_PX / 2}
+              r={gaugeRadius}
+              fill="rgba(255,255,255,0.55)"
+              stroke="#2b1d0e"
+              strokeWidth={CHAINSAW_GAUGE_STROKE_PX}
+            />
+          </svg>
+          {/* Cincin progres: biru saat mengisi, merah saat gergaji aktif. */}
+          <svg
+            className="absolute inset-0 -rotate-90"
+            viewBox={`0 0 ${CHAINSAW_GAUGE_SIZE_PX} ${CHAINSAW_GAUGE_SIZE_PX}`}
+          >
+            <circle
+              ref={gaugeRef}
+              cx={CHAINSAW_GAUGE_SIZE_PX / 2}
+              cy={CHAINSAW_GAUGE_SIZE_PX / 2}
+              r={gaugeRadius}
+              fill="none"
+              stroke={chainsawOn ? '#e53935' : '#2196f3'}
+              strokeWidth={CHAINSAW_GAUGE_STROKE_PX}
+              strokeLinecap="round"
+              strokeDasharray={gaugeCircumference}
+              strokeDashoffset={gaugeCircumference}
+            />
+          </svg>
+          {/* Ikon gergaji mesin + teks progres di tengah gauge. */}
+          <div className="relative flex flex-col items-center justify-center">
+            <svg
+              viewBox="0 0 24 24"
+              style={{ width: `${CHAINSAW_GAUGE_ICON_PX}px`, height: `${CHAINSAW_GAUGE_ICON_PX}px` }}
+            >
+              {/* Gagang atas (oranye). */}
+              <rect x="4" y="7" width="16" height="5" rx="2.5" fill="#ff9f1c" stroke="#2b1d0e" strokeWidth="1.2" />
+              {/* Bilah gergaji (baja). */}
+              <rect x="2" y="12" width="17" height="3.6" rx="1.2" fill="#9e9e9e" stroke="#2b1d0e" strokeWidth="1" />
+              {/* Gigi gergaji. */}
+              <path
+                d="M2 15.6l1.5 1.6 1.5-1.6 1.5 1.6 1.5-1.6 1.5 1.6 1.5-1.6 1.5 1.6 1.5-1.6 1.5 1.6 1.5-1.6 1.5 1.6 1.5-1.6"
+                fill="none"
+                stroke="#2b1d0e"
+                strokeWidth="1"
+              />
+              {/* Gagang depan. */}
+              <rect x="17" y="11" width="5" height="6" rx="1.6" fill="#7a4a1c" stroke="#2b1d0e" strokeWidth="1" />
+            </svg>
+            <span
+              className={`mt-0.5 text-[10px] font-extrabold leading-none ${
+                chainsawOn ? 'text-danger' : 'text-ink'
+              }`}
+            >
+              {gaugeText}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Bar cooldown ayunan kapak — terpusat, tepat di atas teks "Sisi".
@@ -413,8 +576,30 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
 
       {/* Indikator sisi di bawah layar (di bawah bar cooldown). */}
       <div className="pointer-events-none absolute inset-x-0 bottom-1 text-center text-sm font-bold text-ink">
-        Sisi {getState().rotation + 1} / {SIDES}
+        Sisi {sideLabel} / {SIDES}
       </div>
+
+      {/* Popup gergaji: "PERFECT" (benar) atau "GOOD" (miss), di area kayu. */}
+      {popupEvent && (
+        <div
+          key={popupEvent.seq}
+          className="pointer-events-none absolute left-1/2 top-1/3 z-30 -translate-x-1/2 animate-saw-pop"
+        >
+          {popupEvent.text === 'perfect' ? (
+            <div className="rounded-xl border-4 border-ink bg-gradient-to-b from-[#ffd54f] to-[#ff8f00] px-4 py-2 shadow-[0_4px_0_#2b1d0e]">
+              <span className="text-2xl font-extrabold italic tracking-wide text-ink drop-shadow-[0_1px_0_#fff]">
+                PERFECT! +{popupEvent.gain}
+              </span>
+            </div>
+          ) : (
+            <div className="rounded-xl border-4 border-ink bg-gradient-to-b from-[#4fc3f7] to-[#0277bd] px-4 py-2 shadow-[0_4px_0_#2b1d0e]">
+              <span className="text-2xl font-extrabold italic tracking-wide text-white drop-shadow-[0_2px_0_#2b1d0e]">
+                GOOD
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
