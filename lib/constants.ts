@@ -31,6 +31,14 @@ export const ROOM_CODE_LENGTH = 6; // panjang kode room
 export const ROOM_TTL_HOURS = 6; // jam: umur maksimum room sebelum kedaluwarsa
 export const PUBLIC_ROOMS_REFRESH_MS = 10000; // ms: interval segarkan daftar room publik
 
+// --- Sinkronisasi room (heartbeat) ---
+export const HEARTBEAT_MS = 4000; // ms: interval host melaporkan aktivitas room
+export const ROOM_STALE_SECONDS = 15; // detik tanpa heartbeat -> room dianggap mati (tanpa pemain asli)
+
+// --- Bot (pemain AI di dalam room online) ---
+export const BOT_NAMES = ['Budi', 'Andi', 'Siti']; // nama bot (maks 3)
+export const BOT_JOIN_WARNING_MS = 5000; // ms: durasi peringatan saat join ke room berisi bot
+
 // --- AI lokal (Dev 3: 3 pemain dummy) ---
 export const AI_REACT_MIN = 0.8; // detik: jeda minimum antar keputusan AI
 export const AI_REACT_MAX = 1.6; // detik: jeda maksimum antar keputusan AI

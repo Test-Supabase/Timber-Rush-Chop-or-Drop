@@ -32,9 +32,17 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
     isHost,
     connState,
     error,
+    humanCount,
+    botCount,
+    hasBotInRoom,
+    myBotVote,
+    botVoteYes,
+    botKickIn,
     sendInput,
     sendRotate,
     sendReady,
+    sendBotVote,
+    sendRemoveBot,
     startMatch,
     getMyState,
   } = useRealtimeRoom(roomCode, playerName)
@@ -164,6 +172,57 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
               )
             })}
           </ul>
+
+          {/* Peringatan join saat room ada bot */}
+          {botKickIn !== null && botKickIn > 0 && (
+            <div className="mt-3 rounded-xl border-2 border-danger/40 bg-danger/10 px-3 py-2 text-center text-xs font-bold text-danger">
+              Room ini memiliki BOT! Dalam {Math.ceil(botKickIn)} detik bot akan dikeluarkan
+              karena ruang tidak cukup.
+            </div>
+          )}
+
+          {/* Vote tambah bot (selama masih ada kursi kosong) */}
+          {phase === 'lobby' && players.length < PLAYERS_PER_ROOM && (
+            <div className="mt-4 rounded-xl border-2 border-ink/20 bg-white px-3 py-3">
+              <div className="mb-2 text-center text-sm font-extrabold text-ink">
+                Tambah Bot untuk mengisi room?
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => sendBotVote(true)}
+                  className={`rounded-lg border-2 border-ink px-3 py-1.5 text-sm font-extrabold ${
+                    myBotVote ? 'bg-leaf text-white' : 'bg-white'
+                  }`}
+                >
+                  Setuju {botVoteYes > 0 ? `(${botVoteYes}/${humanCount})` : ''}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendBotVote(false)}
+                  className="rounded-lg border-2 border-ink bg-white px-3 py-1.5 text-sm font-extrabold"
+                >
+                  Batal
+                </button>
+              </div>
+              <div className="mt-2 text-center text-xs font-bold text-ink/60">
+                {myBotVote ? 'Anda setuju menambah bot' : 'Semua pemain asli harus setuju'}
+              </div>
+            </div>
+          )}
+
+          {/* Kelola bot (host bisa menghapus, pemain bisa minta hapus) */}
+          {hasBotInRoom && phase === 'lobby' && (
+            <div className="mt-3 flex justify-center">
+              <button
+                type="button"
+                onClick={() => sendRemoveBot()}
+                className="rounded-lg border-2 border-ink bg-white px-3 py-1.5 text-sm font-extrabold"
+              >
+                Keluarkan Bot Terakhir
+              </button>
+            </div>
+          )}
 
           {/* Tombol Siap (semua pemain) */}
           <button

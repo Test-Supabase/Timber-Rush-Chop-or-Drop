@@ -6,19 +6,18 @@
 // Arsitektur: HOST-AUTHORITATIVE (satu klien jadi "host/simulator").
 //  - Host menjalankan simulasi game (update timestep tetap) untuk SEMUA
 //    pemain, lalu menyiarkan snapshot state ke klien lain.
-//  - Klien non-host hanya mengirim INPUT (pukul/putar) dan menampilkan
-//    snapshot terbaru yang diterima. Tidak ada simulasi di klien non-host
-//    agar tidak terjadi desync.
+//  - Klien non-host hanya mengirim INPUT (pukul/putar/siap/vote) dan
+//    menampilkan snapshot terbaru yang diterima.
 //  - Host dipilih deterministik = userId terkecil (lexicographic) di antara
 //    presence yang aktif. Bila host keluar, host baru terpilih otomatis.
-//  - Match berjalan otomatis saat >= 2 pemain hadir; timer mulai dari
-//    COUNTDOWN_MS. Pemain yang join belakangan ikut masuk (join in progress).
+//  - Lobby: semua pemain harus menekan "Siap"; host menekan "Mulai".
+//  - BOT: pemain asli bisa vote "Tambah Bot"; bila SEMUA pemain asli setuju,
+//    host menambahkan bot ke room (mengisi kursi kosong).
 //
 // Catatan penting:
-//  - Kanal Supabase TIDAK boleh dipakai lintas hook. Kita buat SATU kanal
-//    dan panggil semua .on() sebelum .subscribe().
-//  - Semua callback disimpan di ref (lihat callbackRef) agar tidak menangkap
-//    closure basi; kanal hanya dibuat sekali per kode room.
+//  - Kanal Supabase HANYA SATU per kode room; semua .on() dipanggil sebelum
+//    .subscribe().
+//  - Semua callback disimpan di ref agar tidak menangkap closure basi.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -35,10 +34,19 @@ import {
 import {
   PLAYERS_PER_ROOM,
   MIN_PLAYERS_TO_START,
+  SIDES,
   NET_TICK_HZ,
   NET_BROADCAST_MS,
   NET_COUNTDOWN_MS,
+  HEARTBEAT_MS,
+  ROOM_STALE_SECONDS,
+  BOT_NAMES,
+  BOT_JOIN_WARNING_MS,
+  AI_REACT_MIN,
+  AI_REACT_MAX,
+  AI_ACCURACY,
 } from '@/lib/constants'
+import { roomHeartbeat } from '@/lib/rooms'
 
 // ---------- Tipe data wire (dikirim lewat broadcast) ----------
 
@@ -47,6 +55,7 @@ export interface PlayerNet {
   id: string
   name: string
   ready: boolean
+  isBot: boolean
   rotation: number
   fragileSide: number
   fragileHalf: 0 | 1
@@ -67,6 +76,10 @@ interface RoomNet {
   countdown: number // sisa detik countdown
   winnerId: string | null
   players: PlayerNet[]
+  // Suara "Tambah Bot" per pemain asli (playerId -> setuju?).
+  botVotes: Record<string, boolean>
+  // Peringatan bot menyingkir (detik tersisa), null bila tidak ada.
+  botKickIn: number | null
 }
 
 /** Payload presence tiap klien. */
@@ -79,6 +92,7 @@ interface PresenceMeta {
 export interface RealtimeRow {
   id: string
   name: string
+  isBot: boolean
   score: number
   timeLeft: number
   maxTime: number
@@ -92,18 +106,31 @@ type QueueItem =
   | { kind: 'strike'; playerId: string; side: HitSide }
   | { kind: 'rotate'; playerId: string; dir: 'left' | 'right' }
   | { kind: 'ready'; playerId: string; ready: boolean }
+  | { kind: 'voteBot'; playerId: string; add: boolean }
+  | { kind: 'removeBot' }
 
 // ID klien acak (tanpa auth). Cukup unik per browser/tab.
 function randomId(): string {
   return Math.random().toString(36).slice(2, 11)
 }
 
+let botSeq = 0
+function newBotId(): string {
+  botSeq += 1
+  return `bot-${botSeq}-${randomId()}`
+}
+
+function randFloat(min: number, max: number): number {
+  return min + Math.random() * (max - min)
+}
+
 // Ubah PlayerState (internal) -> PlayerNet (wire).
-function toNet(p: PlayerState, id: string, name: string, ready: boolean): PlayerNet {
+function toNet(p: PlayerState, id: string, name: string, ready: boolean, isBot: boolean): PlayerNet {
   return {
     id,
     name,
     ready,
+    isBot,
     rotation: p.rotation,
     fragileSide: p.fragileSide,
     fragileHalf: p.fragileHalf,
@@ -118,23 +145,6 @@ function toNet(p: PlayerState, id: string, name: string, ready: boolean): Player
   }
 }
 
-// Ubah PlayerNet (wire) -> PlayerState (internal) — hanya untuk TreePanel.
-function toPlayerState(n: PlayerNet): PlayerState {
-  return {
-    rotation: n.rotation,
-    fragileSide: n.fragileSide,
-    fragileHalf: n.fragileHalf,
-    hits: n.hits,
-    treeIndex: n.treeIndex,
-    maxTime: n.maxTime,
-    timeLeft: n.timeLeft,
-    score: n.score,
-    swingCooldown: n.swingCooldown,
-    phase: n.phase,
-    transitionElapsed: n.transitionElapsed,
-  }
-}
-
 export function useRealtimeRoom(roomCode: string, playerName: string) {
   const channelRef = useRef<RealtimeChannel | null>(null)
   const myIdRef = useRef<string>(randomId())
@@ -145,6 +155,8 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     countdown: NET_COUNTDOWN_MS / 1000,
     winnerId: null,
     players: [],
+    botVotes: {},
+    botKickIn: null,
   })
   const [isHost, setIsHost] = useState(false)
   const [connState, setConnState] = useState<'connecting' | 'connected' | 'error'>(
@@ -155,13 +167,20 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
   // ---- Ref simulasi (hanya dipakai host) ----
   const hostStateRef = useRef<Map<string, PlayerState>>(new Map())
   const hostNameRef = useRef<Map<string, string>>(new Map())
+  const hostIsBotRef = useRef<Map<string, boolean>>(new Map()) // status bot per pemain
   const readyRef = useRef<Map<string, boolean>>(new Map()) // status "Siap" per pemain
+  const aiTimerRef = useRef<Map<string, number>>(new Map()) // jeda aksi bot berikutnya
   const orderRef = useRef<string[]>([]) // urutan pemain = urutan leaderboard stabil
   const queueRef = useRef<QueueItem[]>([])
   const phaseRef = useRef<'lobby' | 'countdown' | 'playing' | 'result'>('lobby')
   const countdownRef = useRef(NET_COUNTDOWN_MS / 1000)
   const winnerRef = useRef<string | null>(null)
   const hostIdRef = useRef<string>('')
+
+  // Vote tambah bot per pemain asli (true = setuju).
+  const botVotesRef = useRef<Map<string, boolean>>(new Map())
+  // Sisa detik peringatan sebelum bot menyingkir untuk pemain baru (null = tidak ada).
+  const botKickRef = useRef<number | null>(null)
 
   // ---- Ref klien (snapshot terakhir dari host) ----
   const latestRef = useRef<RoomNet | null>(null)
@@ -184,7 +203,13 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
       const st = hostStateRef.current.get(id)
       if (!st) continue
       players.push(
-        toNet(st, id, hostNameRef.current.get(id) ?? 'Pemain', readyRef.current.get(id) ?? false)
+        toNet(
+          st,
+          id,
+          hostNameRef.current.get(id) ?? 'Pemain',
+          readyRef.current.get(id) ?? false,
+          hostIsBotRef.current.get(id) ?? false
+        )
       )
     }
     return {
@@ -193,6 +218,8 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
       countdown: countdownRef.current,
       winnerId: winnerRef.current,
       players,
+      botVotes: Object.fromEntries(botVotesRef.current),
+      botKickIn: botKickRef.current,
     }
   }, [])
 
@@ -206,6 +233,63 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     ch.send({ type: 'broadcast', event: 'room', payload: snapshot }).catch(() => {})
   }, [buildHostRoom, publishRoom])
 
+  // ---- Bot: tambah satu bot bila kursi masih ada ----
+  const addBot = useCallback(() => {
+    if (orderRef.current.length >= PLAYERS_PER_ROOM) return
+    const usedNames = new Set(hostNameRef.current.values())
+    const name = BOT_NAMES.find((n) => !usedNames.has(n)) ?? `Bot ${botSeq + 1}`
+    const id = newBotId()
+    hostStateRef.current.set(id, createPlayerState())
+    hostNameRef.current.set(id, name)
+    hostIsBotRef.current.set(id, true)
+    readyRef.current.set(id, true) // bot selalu siap
+    aiTimerRef.current.set(id, randFloat(AI_REACT_MIN, AI_REACT_MAX))
+    orderRef.current.push(id)
+  }, [])
+
+  // ---- Bot: hapus bot terakhir (selalu sisakan minimal 1 bot saat ada vote) ----
+  const removeOneBot = useCallback(() => {
+    for (let i = orderRef.current.length - 1; i >= 0; i--) {
+      const id = orderRef.current[i]
+      if (hostIsBotRef.current.get(id)) {
+        orderRef.current = orderRef.current.filter((x) => x !== id)
+        hostStateRef.current.delete(id)
+        hostNameRef.current.delete(id)
+        hostIsBotRef.current.delete(id)
+        readyRef.current.delete(id)
+        aiTimerRef.current.delete(id)
+        return
+      }
+    }
+  }, [])
+
+  // ---- Vote bot: bila SEMUA pemain asli setuju dan ada kursi kosong,
+  //      tambahkan satu bot lalu reset suara (perlu vote lagi untuk bot berikutnya).
+  const tallyBotVotes = useCallback(() => {
+    if (phaseRef.current !== 'lobby') return
+    const humanIds = orderRef.current.filter((id) => !hostIsBotRef.current.get(id))
+    if (humanIds.length === 0) return
+    const allAgree = humanIds.every((id) => botVotesRef.current.get(id) === true)
+    if (allAgree && orderRef.current.length < PLAYERS_PER_ROOM) {
+      addBot()
+      botVotesRef.current.clear()
+    }
+  }, [addBot])
+
+  // ---- Peringatan bot menyingkir: saat timer habis, bot dilepas bila room penuh ----
+  const tickBotKick = useCallback(
+    (dt: number) => {
+      if (botKickRef.current === null) return
+      botKickRef.current -= dt
+      if (botKickRef.current > 0) return
+      botKickRef.current = null
+      while (orderRef.current.length > PLAYERS_PER_ROOM && removeOneBot()) {
+        // terus lepas bot sampai muat
+      }
+    },
+    [removeOneBot]
+  )
+
   // ---- Terapkan input ke state host ----
   const applyQueue = useCallback(() => {
     const q = queueRef.current
@@ -215,16 +299,49 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
         readyRef.current.set(item.playerId, item.ready)
         continue
       }
+      if (item.kind === 'voteBot') {
+        if (hostIsBotRef.current.get(item.playerId)) continue // bot tidak vote
+        botVotesRef.current.set(item.playerId, item.add)
+        tallyBotVotes()
+        continue
+      }
+      if (item.kind === 'removeBot') {
+        removeOneBot()
+        continue
+      }
       const st = hostStateRef.current.get(item.playerId)
       if (!st) continue
       if (item.kind === 'strike') strike(st, item.side)
-      else rotate(st, item.dir)
+      else if (item.kind === 'rotate') rotate(st, item.dir)
     }
+  }, [tallyBotVotes, removeOneBot])
+
+  // ---- AI bot: putar ke sisi rapuh lalu pukul (dengan akurasi) ----
+  const runBotAi = useCallback((id: string, st: PlayerState, dt: number) => {
+    let t = aiTimerRef.current.get(id) ?? 0
+    t -= dt
+    if (t > 0) {
+      aiTimerRef.current.set(id, t)
+      return
+    }
+    aiTimerRef.current.set(id, randFloat(AI_REACT_MIN, AI_REACT_MAX))
+
+    if (st.phase !== 'playing') return
+    if (st.rotation !== st.fragileSide) {
+      const steps = (st.fragileSide - st.rotation + SIDES) % SIDES
+      rotate(st, steps <= SIDES / 2 ? 'right' : 'left')
+      return
+    }
+    const correctSide: HitSide = st.fragileHalf === 0 ? 'left' : 'right'
+    const wrongSide: HitSide = correctSide === 'left' ? 'right' : 'left'
+    strike(st, Math.random() < AI_ACCURACY ? correctSide : wrongSide)
   }, [])
 
   // ---- Langkah simulasi host ----
   const hostStep = useCallback((dt: number) => {
-    // Fase lobby: tidak ada simulasi; hanya proses input "siap" lalu tunggu host memulai.
+    tickBotKick(dt)
+
+    // Fase lobby: tidak ada simulasi; proses input (siap/vote) lalu tunggu mulai.
     if (phaseRef.current === 'lobby') {
       applyQueue()
       return
@@ -246,6 +363,7 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
       const st = hostStateRef.current.get(id)
       if (!st) continue
       if (st.phase !== 'over') {
+        if (hostIsBotRef.current.get(id)) runBotAi(id, st, dt)
         updatePlayer(st, dt)
         // Baca ulang fase setelah update (TS tidak melacak mutasi).
         if ((st.phase as string) !== 'over') alive.push(id)
@@ -257,7 +375,7 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
       winnerRef.current = alive.length === 1 ? alive[0] : null
       phaseRef.current = 'result'
     }
-  }, [applyQueue])
+  }, [applyQueue, runBotAi, tickBotKick])
 
   // ---- Presence: sinkron daftar pemain & tentukan host ----
   const onPresenceSync = useCallback(() => {
@@ -277,7 +395,7 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
 
     const liveIds = [...byId.keys()].sort() // deterministik
 
-    // Kapasitas room.
+    // Kapasitas room (hanya pemain asli yang dihitung dari presence).
     if (liveIds.length > PLAYERS_PER_ROOM) {
       setError('Room penuh (maksimum ' + PLAYERS_PER_ROOM + ' pemain).')
     }
@@ -289,11 +407,17 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     setIsHost(iAmHost)
 
     if (iAmHost) {
-      // Tambah pemain baru; hapus yang sudah pergi.
+      // Pemain asli baru masuk ke room yang berisi bot -> beri peringatan 5 dtk.
+      const newHuman = liveIds.some((id) => !hostStateRef.current.has(id))
+      const hasBotNow = orderRef.current.some((id) => hostIsBotRef.current.get(id))
+      if (newHuman && hasBotNow) botKickRef.current = BOT_JOIN_WARNING_MS / 1000
+
+      // Tambah pemain asli baru; hapus yang sudah pergi (bot TIDAK dihapus di sini).
       for (const id of liveIds) {
         if (!hostStateRef.current.has(id)) {
           hostStateRef.current.set(id, createPlayerState())
           hostNameRef.current.set(id, byId.get(id)?.name ?? 'Pemain')
+          hostIsBotRef.current.set(id, false)
           readyRef.current.set(id, false) // default belum siap
           orderRef.current.push(id)
         } else {
@@ -301,16 +425,20 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
         }
       }
       for (const id of [...orderRef.current]) {
+        if (hostIsBotRef.current.get(id)) continue // biarkan bot
         if (!byId.has(id)) {
           orderRef.current = orderRef.current.filter((x) => x !== id)
           hostStateRef.current.delete(id)
           hostNameRef.current.delete(id)
           readyRef.current.delete(id)
+          botVotesRef.current.delete(id)
         }
       }
+      // Sinkron ulang vote bot setelah keanggotaan berubah.
+      tallyBotVotes()
       broadcastRoom()
     }
-  }, [broadcastRoom])
+  }, [broadcastRoom, tallyBotVotes])
 
   handlersRef.current.onPresenceSync = onPresenceSync
 
@@ -331,6 +459,10 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
       if (!payload?.playerId) return
       if (payload.kind === 'ready' && typeof payload.ready === 'boolean') {
         queueRef.current.push({ kind: 'ready', playerId: payload.playerId, ready: payload.ready })
+      } else if (payload.kind === 'voteBot' && typeof payload.add === 'boolean') {
+        queueRef.current.push({ kind: 'voteBot', playerId: payload.playerId, add: payload.add })
+      } else if (payload.kind === 'removeBot') {
+        queueRef.current.push({ kind: 'removeBot' })
       } else if (payload.kind === 'strike' && payload.side) {
         queueRef.current.push({ kind: 'strike', playerId: payload.playerId, side: payload.side })
       } else if (payload.kind === 'rotate' && payload.dir) {
@@ -362,6 +494,32 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
       supabase.removeChannel(ch)
     }
   }, [roomCode, playerName, getIsHost, publishRoom])
+
+  // ---- Heartbeat: pastikan room tercatat "hidup" bila ada klien aktif ----
+  //  - Menulis status pemain asli & bot ke DB.
+  //  - Membersihkan room yang tak lagi di-heartbeat (tanpa pemain asli).
+  useEffect(() => {
+    let stop = false
+    const beat = async () => {
+      try {
+        const r = latestRef.current
+        // Jumlah pemain asli menurut snapshot; bila belum ada, minimal 1
+        // (klien ini sendiri sedang aktif).
+        const humans = r
+          ? Math.max(1, r.players.filter((p) => !p.isBot).length)
+          : 1
+        const hasBot = r ? r.players.some((p) => p.isBot) : false
+        await roomHeartbeat(roomCode, humans, hasBot, ROOM_STALE_SECONDS)
+      } catch {
+        // Abaikan; heartbeat dicoba lagi di interval berikutnya.
+      }
+      if (!stop) window.setTimeout(beat, HEARTBEAT_MS)
+    }
+    void beat()
+    return () => {
+      stop = true
+    }
+  }, [roomCode])
 
   // ---- Loop simulasi host + penyiaran berkala ----
   useEffect(() => {
@@ -404,29 +562,34 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
   // Bila kita host, kanal memakai self:false sehingga input kita TIDAK
   // kembali ke diri sendiri — jadi kita antrikan langsung ke queueRef.
   const sendInput = useCallback((side: HitSide) => {
-    const payload = { kind: 'strike', playerId: myIdRef.current, side }
     if (getIsHost()) {
       queueRef.current.push({ kind: 'strike', playerId: myIdRef.current, side })
       return
     }
     const ch = channelRef.current
     if (!ch) return
-    ch.send({ type: 'broadcast', event: 'input', payload }).catch(() => {})
+    ch.send({
+      type: 'broadcast',
+      event: 'input',
+      payload: { kind: 'strike', playerId: myIdRef.current, side },
+    }).catch(() => {})
   }, [getIsHost])
 
   const sendRotate = useCallback((dir: 'left' | 'right') => {
-    const payload = { kind: 'rotate', playerId: myIdRef.current, dir }
     if (getIsHost()) {
       queueRef.current.push({ kind: 'rotate', playerId: myIdRef.current, dir })
       return
     }
     const ch = channelRef.current
     if (!ch) return
-    ch.send({ type: 'broadcast', event: 'input', payload }).catch(() => {})
+    ch.send({
+      type: 'broadcast',
+      event: 'input',
+      payload: { kind: 'rotate', playerId: myIdRef.current, dir },
+    }).catch(() => {})
   }, [getIsHost])
 
-  // ---- Aksi lobby: siap / mulai ----
-  // Siap: setiap pemain (termasuk host) menekan "Siap" sendiri.
+  // ---- Aksi lobby: siap / mulai / vote bot ----
   const sendReady = useCallback((ready: boolean) => {
     if (getIsHost()) {
       queueRef.current.push({ kind: 'ready', playerId: myIdRef.current, ready })
@@ -439,6 +602,32 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
       event: 'input',
       payload: { kind: 'ready', playerId: myIdRef.current, ready },
     }).catch(() => {})
+  }, [getIsHost])
+
+  // Vote tambah bot (setuju = true, batal = false). Berlaku di lobby.
+  const sendBotVote = useCallback((add: boolean) => {
+    if (getIsHost()) {
+      queueRef.current.push({ kind: 'voteBot', playerId: myIdRef.current, add })
+      return
+    }
+    const ch = channelRef.current
+    if (!ch) return
+    ch.send({
+      type: 'broadcast',
+      event: 'input',
+      payload: { kind: 'voteBot', playerId: myIdRef.current, add },
+    }).catch(() => {})
+  }, [getIsHost])
+
+  // Lepas bot terakhir secara langsung (tanpa vote), hanya di lobby.
+  const sendRemoveBot = useCallback(() => {
+    if (getIsHost()) {
+      queueRef.current.push({ kind: 'removeBot' })
+      return
+    }
+    const ch = channelRef.current
+    if (!ch) return
+    ch.send({ type: 'broadcast', event: 'input', payload: { kind: 'removeBot' } }).catch(() => {})
   }, [getIsHost])
 
   // Mulai: hanya host, hanya bila >= MIN_PLAYERS_TO_START dan semua sudah siap.
@@ -466,6 +655,7 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     .map((p) => ({
       id: p.id,
       name: p.name,
+      isBot: p.isBot,
       score: p.score,
       timeLeft: p.timeLeft,
       maxTime: p.maxTime,
@@ -481,6 +671,15 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     })
     .map((r, i) => ({ ...r, rank: i + 1 }))
 
+  // Jumlah pemain asli & bot (untuk UI lobby & panel vote).
+  const humanCount = room.players.filter((p) => !p.isBot).length
+  const botCount = room.players.filter((p) => p.isBot).length
+  const hasBotInRoom = botCount > 0
+  // Suara "Tambah Bot" (dari snapshot agar semua klien melihat progres).
+  const myBotVote = room.botVotes[myIdRef.current] === true
+  // Berapa pemain asli yang sudah setuju.
+  const botVoteYes = room.players.filter((p) => !p.isBot && room.botVotes[p.id] === true).length
+
   return {
     rows,
     myId: myIdRef.current,
@@ -492,9 +691,17 @@ export function useRealtimeRoom(roomCode: string, playerName: string) {
     isHost,
     connState,
     error,
+    humanCount,
+    botCount,
+    hasBotInRoom,
+    myBotVote,
+    botVoteYes,
+    botKickIn: room.botKickIn,
     sendInput,
     sendRotate,
     sendReady,
+    sendBotVote,
+    sendRemoveBot,
     startMatch,
     getMyState,
   }
