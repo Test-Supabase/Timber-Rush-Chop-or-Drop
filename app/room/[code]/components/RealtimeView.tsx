@@ -403,8 +403,10 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
             )}
           </div>
 
-          {/* Overlay eliminasi */}
-          {!amIAlive && (
+          {/* Overlay eliminasi: saat belum menonton, tampilkan pemberitahuan +
+              tombol kembali. Saat sedang menonton, overlay disembunyikan agar
+              aktivitas pemain yang ditonton terlihat. */}
+          {!amIAlive && !isSpectating && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/40">
               <div className="text-3xl font-extrabold text-white">TERELIMINASI!</div>
               <div className="text-lg font-bold text-white">
@@ -422,8 +424,35 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
               </button>
             </div>
           )}
+
+          {/* Bilah spektator: saat sedang menonton pemain lain. */}
+          {isSpectating && watched && (
+            <div className="absolute inset-x-0 top-2 z-20 flex items-center justify-center gap-2">
+              <span className="rounded-full border-2 border-ink bg-sun px-3 py-1 text-xs font-extrabold text-ink shadow-[0_2px_0_#2b1d0e]">
+                👁️ Menonton: {watched.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setWatchingId(null)}
+                className="rounded-full border-2 border-ink bg-white px-3 py-1 text-xs font-extrabold text-ink shadow-[0_2px_0_#2b1d0e] active:translate-y-0.5 active:shadow-none"
+              >
+                ✕ Berhenti
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Tombol kembali mengambang: tetap tersedia saat menonton. */}
+      {!amIAlive && isSpectating && (
+        <button
+          type="button"
+          onClick={() => router.push('/')}
+          className="fixed bottom-4 left-4 z-30 rounded-xl border-4 border-ink bg-sky px-4 py-2 text-sm font-extrabold text-ink shadow-[0_4px_0_#2b1d0e] active:translate-y-1 active:shadow-none"
+        >
+          ← Kembali
+        </button>
+      )}
     </div>
   )
 }
