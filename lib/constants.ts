@@ -26,6 +26,9 @@ export const SCORE_TREE_FELL = 50; // bonus pohon roboh
 
 // --- Room ---
 export const PLAYERS_PER_ROOM = 4; // pemain maks per room
+export const ROOM_CODE_LENGTH = 6; // panjang kode room
+export const ROOM_TTL_HOURS = 6; // jam: umur maksimum room sebelum kedaluwarsa
+export const PUBLIC_ROOMS_REFRESH_MS = 10000; // ms: interval segarkan daftar room publik
 
 // --- AI lokal (Dev 3: 3 pemain dummy) ---
 export const AI_REACT_MIN = 0.8; // detik: jeda minimum antar keputusan AI
