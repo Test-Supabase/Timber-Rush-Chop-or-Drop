@@ -333,37 +333,11 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
   }
 
   // ---- Layar bermain ----
-  // Layout: Kiri = batang pohon (tinggi penuh, lebar tetap), Kanan = sidebar.
+  // Layout: Pohon besar di tengah layar, sidebar leaderboard/timer di kanan.
   return (
-    <div className="flex min-h-screen p-4">
-      {/* BATANG POHON (KIRI) — tinggi penuh, lebar tetap (max-w-md) */}
-      <div className="flex flex-1 min-w-0 items-stretch justify-center">
-        <div className="relative h-full w-full max-w-md">
-          <TreePanel getState={treeState} onStrike={handleStrike} onRotate={handleRotate} />
-
-          {/* Feedback DEFLEKSI! — overlay di tengah */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            {feedback && (
-              <span className="animate-pulse text-3xl font-extrabold text-danger drop-shadow-[0_2px_0_#fff]">
-                {feedback}
-              </span>
-            )}
-          </div>
-
-          {/* Overlay eliminasi */}
-          {!amIAlive && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/40">
-              <div className="text-3xl font-extrabold text-white">TERELIMINASI!</div>
-              <div className="mt-2 text-lg font-bold text-white">
-                Menonton {rows.filter((r) => r.alive).length} pemain tersisa…
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* SIDEBAR LEADERBOARD + TIMER (KANAN) */}
-      <div className="ml-4 flex w-40 flex-shrink-0 flex-col items-center gap-4">
+    <div className="relative min-h-screen p-4">
+      {/* SIDEBAR LEADERBOARD + TIMER (KANAN) — di depan agar tetap dapat diklik */}
+      <div className="relative z-10 ml-auto flex w-40 flex-shrink-0 flex-col items-center gap-4">
         <TopBar players={rows} myId={myId} />
         <TimerBar timeLeft={me?.timeLeft ?? 0} maxTime={me?.maxTime ?? 30} />
         {me && (
@@ -384,6 +358,32 @@ export default function RealtimeView({ roomCode, playerName }: RealtimeViewProps
             <kbd className="rounded border-2 border-ink/30 bg-white px-1 py-0.5 text-ink">L</kbd>{' '}
             Pukul
           </span>
+        </div>
+      </div>
+
+      {/* BATANG POHON (TENGAH) — tinggi penuh & terpusat horizontal */}
+      <div className="absolute inset-0 z-0 flex items-center justify-center">
+        <div className="relative h-full w-full max-w-md">
+          <TreePanel getState={treeState} onStrike={handleStrike} onRotate={handleRotate} />
+
+          {/* Feedback DEFLEKSI! — overlay di tengah */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            {feedback && (
+              <span className="animate-pulse text-3xl font-extrabold text-danger drop-shadow-[0_2px_0_#fff]">
+                {feedback}
+              </span>
+            )}
+          </div>
+
+          {/* Overlay eliminasi */}
+          {!amIAlive && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40">
+              <div className="text-3xl font-extrabold text-white">TERELIMINASI!</div>
+              <div className="mt-2 text-lg font-bold text-white">
+                Menonton {rows.filter((r) => r.alive).length} pemain tersisa…
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

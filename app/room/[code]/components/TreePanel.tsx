@@ -30,9 +30,9 @@ function seededRandom(seed: number): number {
 
 // Jumlah titik sampel tepi batang (vertikal) per sisi.
 const EDGE_SAMPLES = 24
-// Lebar bergelombang tepi (px) dan lekukan maksimum kecil.
-const EDGE_WAVE_PX = 10
-const EDGE_NOTCH_PX = 6
+// Lebar bergelombang tepi (px) — disingkat agar batang terlihat lebih tegak/center.
+const EDGE_WAVE_PX = 4
+const EDGE_NOTCH_PX = 3
 
 interface TrunkEdge {
   left: number[] // jarak tepi kiri dari sisi kiri batang (px), per sampel
@@ -232,43 +232,74 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     ctx.stroke()
     ctx.setLineDash([])
 
-    // Retak/sobek di pinggir kayu (bekas tebasan kapak) — hanya bila sisi
-    // rapuh sedang menghadap. Digambar menjorok ke dalam dari tepi batang.
+    // Sobek horizontal di pinggir kayu (bekas tebasan kapak).
+    // Hanya muncul bila sisi rapuh sedang menghadap.
     if (s.rotation === s.fragileSide && s.phase === 'playing') {
-      const tearSide = s.fragileHalf === 0 ? 'left' : 'right'
-      // Tepi acuan batang pada sisi sobek.
-      const drawTear = (yc: number, h: number, depth: number) => {
-        if (tearSide === 'left') {
-          const ox = x0 + edge.left[edgeIndex(yc, y0, y1)]
-          ctx.beginPath()
-          ctx.moveTo(ox, yc - h)
-          ctx.quadraticCurveTo(ox + depth * 1.6, yc, ox, yc + h)
-          ctx.quadraticCurveTo(ox + depth * 0.6, yc, ox, yc - h)
-          ctx.closePath()
-        } else {
-          const ox = x1 - edge.right[edgeIndex(yc, y0, y1)]
-          ctx.beginPath()
-          ctx.moveTo(ox, yc - h)
-          ctx.quadraticCurveTo(ox - depth * 1.6, yc, ox, yc + h)
-          ctx.quadraticCurveTo(ox - depth * 0.6, yc, ox, yc - h)
-          ctx.closePath()
-        }
-        // Isi gelap (rongga sobek) + tepi kayu baru terang.
-        ctx.fillStyle = 'rgba(26,17,8,0.85)'
-        ctx.fill()
-        ctx.strokeStyle = 'rgba(230,200,150,0.45)'
-        ctx.lineWidth = 1.5
-        ctx.stroke()
-      }
+      const tearSide = s.fragileHalf === 0 ? -1 : 1 // -1 = kiri, 1 = kanan
+      const tearCount = Math.max(1, s.hits)
 
-      // Sobek utama di tengah sebagai penanda sisi rapuh.
-      drawTear((y0 + y1) / 2, 46, 10 + s.hits * 3)
-
-      // Tambahan sobek mengikuti jumlah pukulan benar.
       for (let i = 0; i < s.hits; i++) {
-        const t = (i + 1) / (s.hits + 1)
-        const yc = y0 + (y1 - y0) * (0.15 + t * 0.7)
-        drawTear(yc, 22 + i * 3, 8 + i * 3)
+        const t = (i + 1) / (tearCount + 1)
+        const yc = y0 + (y1 - y0) * (0.18 + t * 0.64)
+        const idx = edgeIndex(yc, y0, y1)
+        // Titik tepi batang pada sisi sobek.
+        const edgeX =
+          tearSide === -1 ? x0 + edge.left[idx] : x1 - edge.right[idx]
+
+        // Ukuran sobek: makin banyak pukulan makin panjang & lebar.
+        const depth = 16 + i * 9 // panjang horizontal ke dalam kayu
+        const gap = 4 + i * 1.5 // bukaan vertikal (tinggi sobek)
+
+        // 1) Rongga gelap (bayangan) — menyisakan area gelap di bekas sobek.
+        ctx.fillStyle = 'rgba(26,17,8,0.85)'
+        ctx.beginPath()
+        ctx.moveTo(edgeX, yc - gap)
+        ctx.quadraticCurveTo(
+          edgeX + tearSide * depth * 0.55,
+          yc - gap * 0.5,
+          edgeX + tearSide * depth,
+          yc
+        )
+        ctx.quadraticCurveTo(
+          edgeX + tearSide * depth * 0.55,
+          yc + gap * 0.5,
+          edgeX,
+          yc + gap
+        )
+        ctx.closePath()
+        ctx.fill()
+
+        // 2) Bagian terkelupas (kayu baru terang) — horizontal, sedikit terhapus.
+        ctx.fillStyle = 'rgba(196,160,110,0.55)'
+        ctx.beginPath()
+        ctx.moveTo(edgeX, yc - gap * 0.45)
+        ctx.quadraticCurveTo(
+          edgeX + tearSide * depth * 0.5,
+          yc - gap * 0.25,
+          edgeX + tearSide * depth * 0.92,
+          yc
+        )
+        ctx.quadraticCurveTo(
+          edgeX + tearSide * depth * 0.5,
+          yc + gap * 0.25,
+          edgeX,
+          yc + gap * 0.45
+        )
+        ctx.closePath()
+        ctx.fill()
+
+        // 3) Garis tepi sobek tipis agar terlihat tajam.
+        ctx.strokeStyle = 'rgba(230,200,150,0.4)'
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.moveTo(edgeX, yc - gap)
+        ctx.quadraticCurveTo(
+          edgeX + tearSide * depth * 0.55,
+          yc - gap * 0.5,
+          edgeX + tearSide * depth,
+          yc
+        )
+        ctx.stroke()
       }
     }
 
