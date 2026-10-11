@@ -1,0 +1,107 @@
+@import 'tailwindcss';
+
+/* Beri tahu Tailwind file mana yang harus dipindai untuk class utility. */
+@source '../app/**/*.{ts,tsx}';
+@source '../lib/**/*.{ts,tsx}';
+@source '../hooks/**/*.{ts,tsx}';
+
+/* ============================================================
+   TEMA (Tailwind v4 pakai CSS-first config, tanpa tailwind.config.js)
+   Palet warna cartoon + font.
+   ============================================================ */
+@theme {
+  --color-bark: #8b5a2b;
+  --color-bark-dark: #5c3a1a;
+  --color-leaf: #4caf50;
+  --color-leaf-dark: #2e7d32;
+  --color-sky: #bde7ff;
+  --color-sun: #ffd54f;
+  --color-danger: #e53935;
+  --color-ink: #2b1d0e;
+
+  --font-cartoon: 'Trebuchet MS', Verdana, sans-serif;
+
+  /* Animasi getar untuk feedback defleksi. */
+  --animate-shake: shake 0.3s ease-in-out;
+}
+
+/* Latar hutan: gradasi langit + bukit hijau sederhana (tanpa gambar eksternal). */
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: linear-gradient(180deg, #bde7ff 0%, #e8f7ff 55%, #4caf50 55%, #2e7d32 100%);
+  color: #2b1d0e;
+  font-family: var(--font-cartoon);
+}
+
+/* Tekstur kulit kayu (bark) dengan gradasi + garis serat, dibuat dari CSS. */
+.bark-texture {
+  background-color: #8b5a2b;
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.08) 0px,
+      rgba(0, 0, 0, 0.08) 2px,
+      transparent 2px,
+      transparent 14px
+    ),
+    linear-gradient(90deg, #5c3a1a 0%, #8b5a2b 50%, #5c3a1a 100%);
+}
+
+/* Ikon kapak sederhana dibuat dari CSS (mata kapak + gagang). */
+.axe-icon {
+  position: relative;
+  width: 48px;
+  height: 48px;
+}
+.axe-icon::before {
+  content: '';
+  position: absolute;
+  left: 22px;
+  top: 4px;
+  width: 6px;
+  height: 40px;
+  background: #5c3a1a;
+  border-radius: 3px;
+}
+.axe-icon::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  width: 22px;
+  height: 18px;
+  background: #9e9e9e;
+  border: 3px solid #2b1d0e;
+  border-radius: 50% 10% 50% 10%;
+}
+
+/* Area game: cegah scroll/zoom saat disentuh di HP. */
+.game-area {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Efek getar layar saat pukulan salah (defleksi). */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-8px);
+  }
+  40% {
+    transform: translateX(8px);
+  }
+  60% {
+    transform: translateX(-5px);
+  }
+  80% {
+    transform: translateX(5px);
+  }
+}
