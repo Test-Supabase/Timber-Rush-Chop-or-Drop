@@ -18,14 +18,13 @@ export default function TimerBar({ timeLeft, maxTime }: TimerBarProps) {
   return (
     <div className="w-full max-w-2xl mb-6">
       <div className="mb-2 flex justify-between text-base font-bold text-ink">
-        <span>Nyawa</span>
+        <span>Hp</span>
         <span className="text-xl font-extrabold">{percentText}</span>
       </div>
       <div className="h-8 w-full overflow-hidden rounded-xl border-4 border-ink bg-ink/20">
         <div
-          className={`h-full rounded-xl transition-[width] duration-100 ${
-            low ? 'bg-danger' : 'bg-leaf'
-          }`}
+          className={`h-full rounded-xl transition-[width] duration-100 ${low ? 'bg-danger' : 'bg-leaf'
+            }`}
           style={{ width: `${pct}%` }}
         />
       </div>

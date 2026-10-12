@@ -67,7 +67,7 @@ export const CHAINSAW_TRANSITION = 0.5; // detik: transisi antar pohon saat gerg
 // --- Gauge lingkaran gergaji (kanan tengah area pohon) ---
 export const CHAINSAW_GAUGE_SIZE_PX = 88; // px: diameter gauge lingkaran
 export const CHAINSAW_GAUGE_STROKE_PX = 9; // px: tebal cincin gauge
-export const CHAINSAW_GAUGE_RIGHT_PX = 6; // px: jarak gauge dari tepi kanan area pohon
+export const CHAINSAW_GAUGE_RIGHT_PX = -256; // px: jarak gauge dari tepi kanan area pohon
 export const CHAINSAW_GAUGE_ICON_PX = 36; // px: ukuran ikon gergaji di tengah gauge
 export const CHAINSAW_POPUP_MS = 1100; // ms: durasi teks "PERFECT"/"GOOD"
 export const CHAINSAW_FLASH_MS = 900; // ms: durasi animasi "mencolok" saat gergaji aktif

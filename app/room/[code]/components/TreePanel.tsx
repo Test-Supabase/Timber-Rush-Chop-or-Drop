@@ -468,12 +468,11 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
       {/* Gauge lingkaran gergaji mesin — selalu tampil di kanan tengah area batang. */}
       <div
         className="pointer-events-none absolute top-1/2 z-10 -translate-y-1/2"
-        style={{ right: `${CHAINSAW_GAUGE_RIGHT_PX}px` }}
+        style={{ left: `${CHAINSAW_GAUGE_RIGHT_PX}px` }}
       >
         <div
-          className={`relative flex items-center justify-center rounded-full ${
-            chainsawOn ? 'animate-pulse ring-4 ring-danger/70' : ''
-          }`}
+          className={`relative flex items-center justify-center rounded-full ${chainsawOn ? 'animate-pulse ring-4 ring-danger/70' : ''
+            }`}
           style={{ width: `${CHAINSAW_GAUGE_SIZE_PX}px`, height: `${CHAINSAW_GAUGE_SIZE_PX}px` }}
         >
           {/* Cincin dasar gauge. */}
@@ -529,9 +528,8 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
               <rect x="17" y="11" width="5" height="6" rx="1.6" fill="#7a4a1c" stroke="#2b1d0e" strokeWidth="1" />
             </svg>
             <span
-              className={`mt-0.5 text-[10px] font-extrabold leading-none ${
-                chainsawOn ? 'text-danger' : 'text-ink'
-              }`}
+              className={`mt-0.5 text-[10px] font-extrabold leading-none ${chainsawOn ? 'text-danger' : 'text-ink'
+                }`}
             >
               {gaugeText}
             </span>
