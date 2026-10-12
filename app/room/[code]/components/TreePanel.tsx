@@ -25,6 +25,21 @@ import {
   CHAINSAW_GAUGE_RIGHT_PX,
   CHAINSAW_GAUGE_ICON_PX,
   CHAINSAW_POPUP_MS,
+  // Animasi kapak
+  AXE_ANIM_MS,
+  AXE_IMPACT_P,
+  AXE_START_ANGLE_DEG,
+  AXE_FOLLOW_ANGLE_DEG,
+  AXE_RECOIL_ANGLE_DEG,
+  AXE_RETURN_P,
+  AXE_HANDLE_W_PX,
+  AXE_HEAD_LEN_PX,
+  AXE_HEAD_H_PX,
+  AXE_PIVOT_OFFSET_PX,
+  AXE_PIVOT_DROP_PX,
+  AXE_BITE_PX,
+  AXE_RECOIL_SHIFT_PX,
+  AXE_FADE_P,
 } from '@/lib/constants'
 import { chainsawGauge } from '@/lib/gameState'
 
@@ -134,6 +149,19 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     gain: number
   } | null>(null)
 
+  // --- Animasi kapak menebang ---
+  // Dipicu begitu hasil pukulan diketahui (hitSeq naik). Menyimpan waktu mulai,
+  // sisi pukulan, dan hasilnya agar gambar kapak bisa dianimasikan di canvas.
+  const strikeAnimRef = useRef<{
+    start: number
+    side: 'left' | 'right'
+    result: 'correct' | 'wrong'
+  } | null>(null)
+  const lastStrikeSeqRef = useRef(0)
+  // Sekali saja: samakan hitSeq/sawSeq awal agar tidak memicu animasi palsu
+  // saat bergabung di tengah pertandingan (state sudah punya seq > 0).
+  const primedRef = useRef(false)
+
   // Panjang keliling cincin gauge (dipakai untuk dasharray/dashoffset).
   const gaugeRadius = (CHAINSAW_GAUGE_SIZE_PX - CHAINSAW_GAUGE_STROKE_PX) / 2
   const gaugeCircumference = 2 * Math.PI * gaugeRadius
@@ -193,6 +221,14 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
         setChainsawOn(csOn)
       }
 
+      // Frame pertama: sinkronkan seq awal agar tidak ada animasi/popup palsu.
+      if (!primedRef.current) {
+        primedRef.current = true
+        lastStrikeSeqRef.current = s.hitSeq ?? 0
+        lastSawSeqRef.current = s.sawSeq ?? 0
+        lastFlashSeqRef.current = s.chainsawFlashSeq ?? 0
+      }
+
       // Teks tengah gauge: sisa detik saat aktif, progres pohon saat mengisi.
       const gText = csOn
         ? `${(s.chainsawTimeLeft ?? 0).toFixed(1)}s`
@@ -212,7 +248,11 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
       prevRotationRef.current = s.rotation
 
       syncSize()
-      if (cssW > 0 && cssH > 0) drawTreeTrunk(ctx, cssW, cssH, s)
+      if (cssW > 0 && cssH > 0) {
+        drawTreeTrunk(ctx, cssW, cssH, s)
+        // Gambar animasi kapak setelah batang (agar tampil di atas pohon).
+        drawAxeStrike(ctx, cssW, cssH, now, s)
+      }
 
       // Bar cooldown: ditampilkan saat masih cooldown, terisi bertahap.
       const cd = s.swingCooldown ?? 0
@@ -250,6 +290,19 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
         }
       }
 
+      // Deteksi hasil pukulan kapak baru (hitSeq naik) -> mulai animasi kapak.
+      const hitSeq = s.hitSeq ?? 0
+      if (hitSeq !== lastStrikeSeqRef.current) {
+        lastStrikeSeqRef.current = hitSeq
+        if (s.lastHit === 'correct' || s.lastHit === 'wrong') {
+          strikeAnimRef.current = {
+            start: now,
+            side: s.lastSide ?? 'left',
+            result: s.lastHit,
+          }
+        }
+      }
+
       rafRef.current = requestAnimationFrame(render)
     }
 
@@ -263,6 +316,165 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     const t = window.setTimeout(() => setPopupEvent(null), CHAINSAW_POPUP_MS)
     return () => window.clearTimeout(t)
   }, [popupEvent])
+
+  // Gambar kapak pada sudut tertentu, diputar dari titik putar (pivot).
+  // - angleDeg 0 = mata kapak tepat di titik impak.
+  // - angleDeg negatif = kapak terangkat (mata di atas, gagang ke bawah-kanan).
+  // Gambar kapak. `headDist` = jarak dari pivot (tangan) ke ujung mata kapak,
+  // sehingga mata tepat berada pada titik impak bila headDist = jarak pivot->impak.
+  function drawAxe(
+    ctx: CanvasRenderingContext2D,
+    pivotX: number,
+    pivotY: number,
+    angleDeg: number,
+    headDist: number,
+    side: 'left' | 'right'
+  ) {
+    const shaft = Math.max(AXE_HEAD_LEN_PX, headDist - AXE_HEAD_LEN_PX)
+    ctx.save()
+    ctx.translate(pivotX, pivotY)
+    if (side === 'right') ctx.scale(-1, 1)
+    ctx.rotate((angleDeg * Math.PI) / 180)
+
+    // Gagang kayu: dari pivot (tangan) menjulur ke arah mata kapak.
+    ctx.strokeStyle = '#7a4a1c'
+    ctx.lineWidth = AXE_HANDLE_W_PX
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.moveTo(0, 0)
+    ctx.lineTo(shaft, 0)
+    ctx.stroke()
+
+    // Kilau gagang.
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)'
+    ctx.lineWidth = AXE_HANDLE_W_PX * 0.3
+    ctx.beginPath()
+    ctx.moveTo(0, -1)
+    ctx.lineTo(shaft, -1)
+    ctx.stroke()
+
+    // Mata kapak (baja) di ujung gagang.
+    const headGrad = ctx.createLinearGradient(shaft, -AXE_HEAD_H_PX / 2, shaft, AXE_HEAD_H_PX / 2)
+    headGrad.addColorStop(0, '#d8d8d8')
+    headGrad.addColorStop(0.5, '#9e9e9e')
+    headGrad.addColorStop(1, '#6f6f6f')
+    ctx.fillStyle = headGrad
+    ctx.strokeStyle = '#2b1d0e'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    // Bentuk mata kapak: bilah melengkung tajam ke arah batang.
+    ctx.moveTo(shaft, -AXE_HEAD_H_PX / 2)
+    ctx.quadraticCurveTo(shaft + AXE_HEAD_LEN_PX * 0.5, -AXE_HEAD_H_PX * 0.75, shaft + AXE_HEAD_LEN_PX, 0)
+    ctx.quadraticCurveTo(shaft + AXE_HEAD_LEN_PX * 0.5, AXE_HEAD_H_PX * 0.75, shaft, AXE_HEAD_H_PX / 2)
+    ctx.lineTo(shaft - AXE_HANDLE_W_PX, AXE_HEAD_H_PX * 0.34)
+    ctx.lineTo(shaft - AXE_HANDLE_W_PX, -AXE_HEAD_H_PX * 0.34)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+
+    // Lubang/kilau mata kapak.
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'
+    ctx.beginPath()
+    ctx.ellipse(shaft + AXE_HEAD_LEN_PX * 0.35, 0, 2.4, 3.6, 0, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.restore()
+  }
+
+  // Gambar animasi kapak menebang bila sedang aktif. Dipanggil setelah batang
+  // digambar agar kapak tampil di atas pohon.
+  function drawAxeStrike(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    now: number,
+    s: ReturnType<TreePanelProps['getState']>
+  ) {
+    const anim = strikeAnimRef.current
+    if (!anim) return
+    const dur = AXE_ANIM_MS / 1000
+    const t = (now - anim.start) / 1000
+    if (t >= dur) {
+      strikeAnimRef.current = null
+      return
+    }
+
+    // Geometri batang (sama dengan drawTreeTrunk).
+    const trunkW = w * 0.6
+    const x0 = (w - trunkW) / 2
+    const x1 = x0 + trunkW
+    const y0 = 0
+    const y1 = h
+    const edge = getTrunkEdge(s.rotation, trunkW)
+    const yc = (y0 + y1) / 2
+    const idx = edgeIndex(yc, y0, y1)
+
+    const side = anim.side
+    const isLeft = side === 'left'
+    // Titik impak: sedikit masuk ke dalam tepi batang pada sisi yang dipukul.
+    const edgeX = isLeft ? x0 + edge.left[idx] : x1 - edge.right[idx]
+    const impactX = edgeX + (isLeft ? AXE_BITE_PX : -AXE_BITE_PX)
+
+    // Pivot kapak berada di luar batang, di sisi yang sama.
+    const pivotX = isLeft
+      ? x0 - AXE_PIVOT_OFFSET_PX
+      : x1 + AXE_PIVOT_OFFSET_PX
+    const pivotY = yc + AXE_PIVOT_DROP_PX
+
+    // Sudut & jarak impak: arah dan panjang dari pivot ke titik impak, sehingga
+    // ujung mata kapak tepat menyentuh tepi batang saat fase impak.
+    const dx = Math.abs(impactX - pivotX)
+    const dy = yc - pivotY
+    const hitDist = Math.hypot(dx, dy)
+    const hitAngleDeg = (Math.atan2(dy, dx) * 180) / Math.PI
+
+    // Fase animasi: 0..AXE_IMPACT_P = ayunan turun, sisanya = follow-through/pantulan.
+    const p = AXE_IMPACT_P
+    let angle: number
+    let shift = 0
+    if (t < p) {
+      // Ayunan turun: ease-in kuadratik agar makin cepat menuju kayu.
+      const k = t / p
+      const eased = k * k
+      angle = AXE_START_ANGLE_DEG + (hitAngleDeg - AXE_START_ANGLE_DEG) * eased
+    } else {
+      const k = (t - p) / (1 - p)
+      if (anim.result === 'correct') {
+        // Benar: kapak menancap (mata masuk kayu), tahan sebentar, lalu lepas.
+        const bite = Math.sin(Math.min(1, k / AXE_RETURN_P) * (Math.PI / 2)) // 0 -> 1 cepat
+        angle = hitAngleDeg + AXE_FOLLOW_ANGLE_DEG * bite
+      } else {
+        // Salah: kapak terpental ke atas-belakang + geser menjauh dari batang.
+        const e = 1 - Math.pow(1 - k, 3) // ease-out
+        angle = hitAngleDeg + (AXE_RECOIL_ANGLE_DEG - hitAngleDeg) * e
+        shift = AXE_RECOIL_SHIFT_PX * e
+      }
+    }
+
+    // Geser pivot menjauh dari batang saat pantulan (hanya sisi SALAH).
+    const px = isLeft ? pivotX - shift : pivotX + shift
+
+    // Fade-out di akhir animasi.
+    const fadeStart = 1 - AXE_FADE_P
+    const axeAlpha = t > fadeStart ? 1 - (t - fadeStart) / AXE_FADE_P : 1
+    ctx.globalAlpha = axeAlpha
+
+    drawAxe(ctx, px, pivotY, angle, hitDist, side)
+    ctx.globalAlpha = 1
+
+    // Kilatan benturan singkat tepat saat kapak menyentuh kayu.
+    const impactWindow = 0.12
+    if (Math.abs(t - p) < impactWindow) {
+      const a = 1 - Math.abs(t - p) / impactWindow
+      ctx.save()
+      ctx.globalAlpha = a * 0.9
+      ctx.fillStyle = anim.result === 'correct' ? '#fff3c4' : '#ffd1d1'
+      ctx.beginPath()
+      ctx.arc(impactX, yc, 18 + a * 22, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+    }
+  }
 
   function drawTreeTrunk(
     ctx: CanvasRenderingContext2D,

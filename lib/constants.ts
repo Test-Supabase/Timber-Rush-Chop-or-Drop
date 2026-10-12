@@ -72,6 +72,25 @@ export const CHAINSAW_GAUGE_ICON_PX = 36; // px: ukuran ikon gergaji di tengah g
 export const CHAINSAW_POPUP_MS = 1100; // ms: durasi teks "PERFECT"/"GOOD"
 export const CHAINSAW_FLASH_MS = 900; // ms: durasi animasi "mencolok" saat gergaji aktif
 
+// --- Animasi kapak menebang (digambar di canvas) ---
+// Pivot = tangan pemain (di luar batang, bawah). Mata kapak di ujung gagang.
+// Sudut impak dihitung otomatis dari pivot ke tepi batang, jadi tidak perlu
+// konstanta sudut impak. Gagang kapak juga dihitung agar mata tepat di tepi.
+export const AXE_ANIM_MS = 460; // ms: total durasi animasi ayunan kapak
+export const AXE_IMPACT_P = 0.42; // fraksi durasi saat mata kapak menyentuh kayu
+export const AXE_START_ANGLE_DEG = -88; // derajat: sudut awal (kapak terangkat ke atas)
+export const AXE_FOLLOW_ANGLE_DEG = 13; // derajat: lanjutan masuk kayu saat BENAR (menancap)
+export const AXE_RECOIL_ANGLE_DEG = -72; // derajat: sudut pantulan saat SALAH (terpental ke atas-belakang)
+export const AXE_RETURN_P = 0.4; // fraksi fase lanjutan saat kapak selesai menancap (BENAR)
+export const AXE_HANDLE_W_PX = 9; // px: lebar gagang kapak
+export const AXE_HEAD_LEN_PX = 28; // px: panjang mata kapak (ke arah batang)
+export const AXE_HEAD_H_PX = 24; // px: tinggi mata kapak
+export const AXE_PIVOT_OFFSET_PX = 66; // px: jarak titik putar (tangan) dari tepi batang
+export const AXE_PIVOT_DROP_PX = 40; // px: pergeseran pivot ke bawah dari titik impak
+export const AXE_BITE_PX = 8; // px: dalamnya mata kapak masuk ke kayu saat impak
+export const AXE_RECOIL_SHIFT_PX = 18; // px: geser menjauh saat kapak terpental (SALAH)
+export const AXE_FADE_P = 0.28; // fraksi akhir animasi untuk fade-out kapak
+
 // --- Bar cooldown kapak (bawah area batang) ---
 export const COOLDOWN_BAR_WIDTH_PX = 208; // px: lebar bar cooldown
 export const COOLDOWN_BAR_HEIGHT_PX = 16; // px: tinggi bar cooldown
