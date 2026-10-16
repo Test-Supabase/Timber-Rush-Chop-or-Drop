@@ -15,7 +15,7 @@ export const SWING_COOLDOWN = 1.0; // detik jeda antar ayunan
 // --- Waktu (survival) ---
 export const START_MAX_TIME = 30; // detik MAX awal
 export const MAXTIME_STEP = 2; // pengurangan MAX tiap pohon baru
-export const MAXTIME_FLOOR = 6; // lantai MAX (berhenti turun)
+export const MAXTIME_FLOOR = 4; // lantai MAX (berhenti turun)
 export const TREE_TRANSITION = 2.0; // detik transisi antar pohon (timer beku)
 export const WRONG_HIT_PENALTY = 1; // detik yang hilang saat pukul salah
 export const CORRECT_HIT_RECOVERY = 0; // tambahan waktu saat pukul benar (0 = tidak ada)
