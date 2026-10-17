@@ -40,6 +40,12 @@ import {
   AXE_BITE_PX,
   AXE_RECOIL_SHIFT_PX,
   AXE_FADE_P,
+  CHAINSAW_ICON_ROTATE_DEG,
+  // Parameter gambar kapak
+  AXE_PIVOT_IMG_X,
+  AXE_PIVOT_IMG_Y,
+  AXE_NATURAL_ANGLE_DEG,
+  AXE_IMG_LENGTH_PX,
 } from '@/lib/constants'
 import { chainsawGauge } from '@/lib/gameState'
 
@@ -148,6 +154,15 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     text: 'perfect' | 'good'
     gain: number
   } | null>(null)
+
+  // --- Gambar kapak untuk animasi ---
+  const axeImgRef = useRef<HTMLImageElement | null>(null)
+  useEffect(() => {
+    if (axeImgRef.current?.src) return
+    const img = new Image()
+    img.src = '/timber-kapak.png'
+    axeImgRef.current = img
+  }, [])
 
   // --- Animasi kapak menebang ---
   // Dipicu begitu hasil pukulan diketahui (hitSeq naik). Menyimpan waktu mulai,
@@ -320,8 +335,9 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
   // Gambar kapak pada sudut tertentu, diputar dari titik putar (pivot).
   // - angleDeg 0 = mata kapak tepat di titik impak.
   // - angleDeg negatif = kapak terangkat (mata di atas, gagang ke bawah-kanan).
-  // Gambar kapak. `headDist` = jarak dari pivot (tangan) ke ujung mata kapak,
-  // sehingga mata tepat berada pada titik impak bila headDist = jarak pivot->impak.
+  // Gambar kapak menggunakan aset public/timber-kapak.png. Kapak diputar dari
+  // titik putar (pivot = ujung gagang). `headDist` = jarak pivot -> titik impak
+  // (px canvas); gambar diskalakan agar ujung bilah tepat menyentuh titik itu.
   function drawAxe(
     ctx: CanvasRenderingContext2D,
     pivotX: number,
@@ -330,54 +346,24 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     headDist: number,
     side: 'left' | 'right'
   ) {
-    const shaft = Math.max(AXE_HEAD_LEN_PX, headDist - AXE_HEAD_LEN_PX)
+    const img = axeImgRef.current
+    if (!img || !img.complete || !img.naturalWidth) return
+
+    // Skala gambar: panjang alami pivot->bilah dipetakan ke headDist.
+    const scale = headDist / AXE_IMG_LENGTH_PX
+
     ctx.save()
     ctx.translate(pivotX, pivotY)
     if (side === 'right') ctx.scale(-1, 1)
-    ctx.rotate((angleDeg * Math.PI) / 180)
-
-    // Gagang kayu: dari pivot (tangan) menjulur ke arah mata kapak.
-    ctx.strokeStyle = '#7a4a1c'
-    ctx.lineWidth = AXE_HANDLE_W_PX
-    ctx.lineCap = 'round'
-    ctx.beginPath()
-    ctx.moveTo(0, 0)
-    ctx.lineTo(shaft, 0)
-    ctx.stroke()
-
-    // Kilau gagang.
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)'
-    ctx.lineWidth = AXE_HANDLE_W_PX * 0.3
-    ctx.beginPath()
-    ctx.moveTo(0, -1)
-    ctx.lineTo(shaft, -1)
-    ctx.stroke()
-
-    // Mata kapak (baja) di ujung gagang.
-    const headGrad = ctx.createLinearGradient(shaft, -AXE_HEAD_H_PX / 2, shaft, AXE_HEAD_H_PX / 2)
-    headGrad.addColorStop(0, '#d8d8d8')
-    headGrad.addColorStop(0.5, '#9e9e9e')
-    headGrad.addColorStop(1, '#6f6f6f')
-    ctx.fillStyle = headGrad
-    ctx.strokeStyle = '#2b1d0e'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    // Bentuk mata kapak: bilah melengkung tajam ke arah batang.
-    ctx.moveTo(shaft, -AXE_HEAD_H_PX / 2)
-    ctx.quadraticCurveTo(shaft + AXE_HEAD_LEN_PX * 0.5, -AXE_HEAD_H_PX * 0.75, shaft + AXE_HEAD_LEN_PX, 0)
-    ctx.quadraticCurveTo(shaft + AXE_HEAD_LEN_PX * 0.5, AXE_HEAD_H_PX * 0.75, shaft, AXE_HEAD_H_PX / 2)
-    ctx.lineTo(shaft - AXE_HANDLE_W_PX, AXE_HEAD_H_PX * 0.34)
-    ctx.lineTo(shaft - AXE_HANDLE_W_PX, -AXE_HEAD_H_PX * 0.34)
-    ctx.closePath()
-    ctx.fill()
-    ctx.stroke()
-
-    // Lubang/kilau mata kapak.
-    ctx.fillStyle = 'rgba(255,255,255,0.5)'
-    ctx.beginPath()
-    ctx.ellipse(shaft + AXE_HEAD_LEN_PX * 0.35, 0, 2.4, 3.6, 0, 0, Math.PI * 2)
-    ctx.fill()
-
+    // Putar agar arah alami gambar (pivot -> bilah) mengikuti sudut animasi.
+    ctx.rotate(((angleDeg - AXE_NATURAL_ANGLE_DEG) * Math.PI) / 180)
+    ctx.drawImage(
+      img,
+      -AXE_PIVOT_IMG_X * scale,
+      -AXE_PIVOT_IMG_Y * scale,
+      img.naturalWidth * scale,
+      img.naturalHeight * scale
+    )
     ctx.restore()
   }
 
@@ -422,7 +408,7 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
     const pivotY = yc + AXE_PIVOT_DROP_PX
 
     // Sudut & jarak impak: arah dan panjang dari pivot ke titik impak, sehingga
-    // ujung mata kapak tepat menyentuh tepi batang saat fase impak.
+    // ujung bilah kapak tepat menyentuh tepi batang saat fase impak.
     const dx = Math.abs(impactX - pivotX)
     const dy = yc - pivotY
     const hitDist = Math.hypot(dx, dy)
@@ -719,26 +705,19 @@ export default function TreePanel({ getState, onStrike, onRotate }: TreePanelPro
               strokeDashoffset={gaugeCircumference}
             />
           </svg>
-          {/* Ikon gergaji mesin + teks progres di tengah gauge. */}
+          {/* Ikon gergaji mesin (gambar aset) + teks progres di tengah gauge. */}
           <div className="relative flex flex-col items-center justify-center">
-            <svg
-              viewBox="0 0 24 24"
-              style={{ width: `${CHAINSAW_GAUGE_ICON_PX}px`, height: `${CHAINSAW_GAUGE_ICON_PX}px` }}
-            >
-              {/* Gagang atas (oranye). */}
-              <rect x="4" y="7" width="16" height="5" rx="2.5" fill="#ff9f1c" stroke="#2b1d0e" strokeWidth="1.2" />
-              {/* Bilah gergaji (baja). */}
-              <rect x="2" y="12" width="17" height="3.6" rx="1.2" fill="#9e9e9e" stroke="#2b1d0e" strokeWidth="1" />
-              {/* Gigi gergaji. */}
-              <path
-                d="M2 15.6l1.5 1.6 1.5-1.6 1.5 1.6 1.5-1.6 1.5 1.6 1.5-1.6 1.5 1.6 1.5-1.6 1.5 1.6 1.5-1.6 1.5 1.6 1.5-1.6"
-                fill="none"
-                stroke="#2b1d0e"
-                strokeWidth="1"
-              />
-              {/* Gagang depan. */}
-              <rect x="17" y="11" width="5" height="6" rx="1.6" fill="#7a4a1c" stroke="#2b1d0e" strokeWidth="1" />
-            </svg>
+            <img
+              src="/timber-gargaji-mesin.png"
+              alt=""
+              draggable={false}
+              className="object-contain"
+              style={{
+                width: `${CHAINSAW_GAUGE_ICON_PX}px`,
+                height: `${CHAINSAW_GAUGE_ICON_PX}px`,
+                transform: `rotate(${CHAINSAW_ICON_ROTATE_DEG}deg)`,
+              }}
+            />
             <span
               className={`mt-0.5 text-[10px] font-extrabold leading-none ${chainsawOn ? 'text-danger' : 'text-ink'
                 }`}

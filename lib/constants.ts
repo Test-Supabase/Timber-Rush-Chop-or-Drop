@@ -69,6 +69,7 @@ export const CHAINSAW_GAUGE_SIZE_PX = 88; // px: diameter gauge lingkaran
 export const CHAINSAW_GAUGE_STROKE_PX = 9; // px: tebal cincin gauge
 export const CHAINSAW_GAUGE_RIGHT_PX = -256; // px: jarak gauge dari tepi kanan area pohon
 export const CHAINSAW_GAUGE_ICON_PX = 36; // px: ukuran ikon gergaji di tengah gauge
+export const CHAINSAW_ICON_ROTATE_DEG = 35.9; // derajat: rotasi gambar gergaji agar bilah menghadap atas-kanan
 export const CHAINSAW_POPUP_MS = 1100; // ms: durasi teks "PERFECT"/"GOOD"
 export const CHAINSAW_FLASH_MS = 900; // ms: durasi animasi "mencolok" saat gergaji aktif
 
@@ -90,6 +91,15 @@ export const AXE_PIVOT_DROP_PX = 40; // px: pergeseran pivot ke bawah dari titik
 export const AXE_BITE_PX = 8; // px: dalamnya mata kapak masuk ke kayu saat impak
 export const AXE_RECOIL_SHIFT_PX = 18; // px: geser menjauh saat kapak terpental (SALAH)
 export const AXE_FADE_P = 0.28; // fraksi akhir animasi untuk fade-out kapak
+
+// --- Parameter gambar kapak (public/timber-kapak.png) ---
+// Pivot (titik putar = ujung gagang) dalam koordinat gambar yang sudah di-crop.
+export const AXE_PIVOT_IMG_X = 34.2; // px: koordinat X titik putar dalam gambar
+export const AXE_PIVOT_IMG_Y = 504.8; // px: koordinat Y titik putar dalam gambar
+// Sudut alami gambar kapak (arah dari pivot ke ujung bilah), dalam derajat.
+export const AXE_NATURAL_ANGLE_DEG = -40.72; // derajat: sudut alami gambar kapak
+// Jarak pivot -> ujung bilah dalam gambar (untuk menghitung skala gambar).
+export const AXE_IMG_LENGTH_PX = 617.9; // px: panjang alami kapak dalam gambar
 
 // --- Bar cooldown kapak (bawah area batang) ---
 export const COOLDOWN_BAR_WIDTH_PX = 208; // px: lebar bar cooldown
